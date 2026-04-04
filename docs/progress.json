@@ -1,0 +1,182 @@
+{
+  "project": "crit-ide",
+  "version": "0.1.0-dev",
+  "sprints": [
+    {
+      "id": 1,
+      "name": "Foundation",
+      "status": "done",
+      "completed_at": "2026-04-04",
+      "summary": "Core event-driven architecture, single-buffer editing, tcell rendering",
+      "deliverables": [
+        {
+          "item": "Go project scaffolding (go.mod, .gitignore, directory structure)",
+          "status": "done"
+        },
+        {
+          "item": "TextStore interface with LineStore ([]string) implementation",
+          "status": "done"
+        },
+        {
+          "item": "Buffer with cursor movement, Unicode-aware insert/delete, sticky column",
+          "status": "done"
+        },
+        {
+          "item": "Non-blocking event bus (channel-based)",
+          "status": "done"
+        },
+        {
+          "item": "Action interface, Registry, and 14 concrete actions",
+          "status": "done"
+        },
+        {
+          "item": "Input handler goroutine with hardcoded keymap",
+          "status": "done"
+        },
+        {
+          "item": "tcell renderer with line numbers, cursor, statusline",
+          "status": "done"
+        },
+        {
+          "item": "Main event loop (App.Run) serializing all state mutations",
+          "status": "done"
+        },
+        {
+          "item": "File open and save",
+          "status": "done"
+        },
+        {
+          "item": "42 unit tests covering editor core and actions",
+          "status": "done"
+        }
+      ],
+      "actions_registered": [
+        "cursor.up",
+        "cursor.down",
+        "cursor.left",
+        "cursor.right",
+        "cursor.home",
+        "cursor.end",
+        "insert.char",
+        "insert.newline",
+        "delete.backward",
+        "delete.forward",
+        "file.save",
+        "app.quit",
+        "scroll.up",
+        "scroll.down"
+      ],
+      "keybindings": {
+        "Arrow Up": "cursor.up",
+        "Arrow Down": "cursor.down",
+        "Arrow Left": "cursor.left",
+        "Arrow Right": "cursor.right",
+        "Home": "cursor.home",
+        "End": "cursor.end",
+        "Enter": "insert.newline",
+        "Backspace": "delete.backward",
+        "Delete": "delete.forward",
+        "Tab": "insert.char (tab)",
+        "Ctrl+S": "file.save",
+        "Ctrl+Q": "app.quit",
+        "PageUp": "scroll.up",
+        "PageDown": "scroll.down",
+        "Any printable key": "insert.char"
+      }
+    },
+    {
+      "id": 2,
+      "name": "Multi-buffer & Splits",
+      "status": "planned",
+      "summary": "BufferManager, multiple views, horizontal/vertical splits, statusline, mouse click/scroll",
+      "deliverables": [
+        { "item": "BufferManager for multiple open buffers", "status": "planned" },
+        { "item": "EditorView decoupled from Buffer (multiple views per buffer)", "status": "planned" },
+        { "item": "LayoutTree with horizontal/vertical splits", "status": "planned" },
+        { "item": "Split resize via keyboard", "status": "planned" },
+        { "item": "Mouse click to position cursor", "status": "planned" },
+        { "item": "Mouse click to focus pane", "status": "planned" },
+        { "item": "Mouse scroll for viewport", "status": "planned" },
+        { "item": "Enhanced statusline with per-pane info", "status": "planned" }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Commands & Keymaps",
+      "status": "planned",
+      "summary": "Command registry, configurable keymap engine, command palette, fuzzy file open",
+      "deliverables": [
+        { "item": "CommandRegistry with ID-based commands", "status": "planned" },
+        { "item": "Configurable keymap engine (TOML-based)", "status": "planned" },
+        { "item": "Context-aware keybinding resolution", "status": "planned" },
+        { "item": "Chord/leader key support", "status": "planned" },
+        { "item": "Command palette popup", "status": "planned" },
+        { "item": "Fuzzy file finder", "status": "planned" }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Visual Polish",
+      "status": "planned",
+      "summary": "Syntax highlighting, file tree, project-wide search",
+      "deliverables": [
+        { "item": "Syntax highlighting (regex-based V1, Tree-sitter V2)", "status": "planned" },
+        { "item": "File explorer / tree panel", "status": "planned" },
+        { "item": "Project-wide search with results navigation", "status": "planned" },
+        { "item": "Undo/redo", "status": "planned" }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "LSP",
+      "status": "planned",
+      "summary": "Language Server Protocol integration",
+      "deliverables": [
+        { "item": "LSP client (stdio JSON-RPC)", "status": "planned" },
+        { "item": "Diagnostics (inline + panel)", "status": "planned" },
+        { "item": "Go to definition", "status": "planned" },
+        { "item": "Hover information", "status": "planned" },
+        { "item": "Rename symbol", "status": "planned" },
+        { "item": "Completion popup (LSP source)", "status": "planned" }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "Git",
+      "status": "planned",
+      "summary": "Git integration with status panel and diff viewer",
+      "deliverables": [
+        { "item": "Git status panel (staged, unstaged, untracked)", "status": "planned" },
+        { "item": "Diff viewer (inline + side-by-side)", "status": "planned" },
+        { "item": "Stage/unstage file and hunk", "status": "planned" },
+        { "item": "Basic commit from IDE", "status": "planned" },
+        { "item": "Branch display in statusline", "status": "planned" }
+      ]
+    },
+    {
+      "id": 7,
+      "name": "Terminal & Tasks",
+      "status": "planned",
+      "summary": "Embedded terminal pane and task runner",
+      "deliverables": [
+        { "item": "Terminal pane with PTY integration", "status": "planned" },
+        { "item": "Multiple terminal sessions", "status": "planned" },
+        { "item": "Task runner (build, test, lint)", "status": "planned" },
+        { "item": "Problem matcher (click error → go to file:line)", "status": "planned" }
+      ]
+    },
+    {
+      "id": 8,
+      "name": "AI Integration",
+      "status": "planned",
+      "summary": "Local AI autocomplete and code assistance",
+      "deliverables": [
+        { "item": "AI provider abstraction (Ollama first)", "status": "planned" },
+        { "item": "Inline ghost text completion", "status": "planned" },
+        { "item": "Explain selection action", "status": "planned" },
+        { "item": "Context builder (current file, imports, LSP symbols)", "status": "planned" },
+        { "item": "Hot-reloadable TOML configuration", "status": "planned" }
+      ]
+    }
+  ]
+}
