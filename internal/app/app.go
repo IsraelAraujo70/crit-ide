@@ -153,9 +153,7 @@ func (a *App) render() {
 func (a *App) ensureCursorVisible() {
 	_, h := a.screen.Size()
 	editorHeight := h - 1 // Statusline takes 1 row.
-	if editorHeight < 1 {
-		editorHeight = 1
-	}
+	editorHeight = max(editorHeight, 1)
 
 	if a.buffer.CursorRow < a.scrollY {
 		a.scrollY = a.buffer.CursorRow

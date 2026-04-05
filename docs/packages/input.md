@@ -6,7 +6,7 @@ The input package handles raw terminal events and translates them into action ev
 
 | File | Purpose |
 |------|---------|
-| `handler.go` | `Handler` — input goroutine with keymap translation |
+| `handler.go` | `Handler` — input goroutine with keymap + mouse translation |
 
 ## How It Works
 
@@ -22,11 +22,11 @@ The `Handler` sits in a tight loop calling `screen.PollEvent()`. When an event a
 | tcell Event | Translation |
 |-------------|------------|
 | `EventKey` | Translated to an action via the keymap |
-| `EventMouse` | Translated to `mouse.click` or `mouse.scroll` actions with screen coordinates |
+| `EventMouse` | Translated to mouse actions (click, drag, scroll, right-click) |
 | `EventResize` | Sent as `EventResize` (triggers screen sync + re-render) |
 | `nil` | Goroutine exits (screen was finalized) |
 
-## Sprint 1 Keymap (Hardcoded)
+## Keymap (Hardcoded)
 
 | Key | Action ID |
 |-----|-----------|
@@ -36,9 +36,12 @@ The `Handler` sits in a tight loop calling `screen.PollEvent()`. When an event a
 | Enter | `insert.newline` |
 | Backspace | `delete.backward` |
 | Delete | `delete.forward` |
+| Escape | `input.escape` |
 | Tab | `insert.char` (payload: `'\t'`) |
 | Ctrl+S | `file.save` |
 | Ctrl+Q | `app.quit` |
+| Ctrl+C / Ctrl+X / Ctrl+V | `clipboard.copy` / `clipboard.cut` / `clipboard.paste` |
+| Ctrl+A | `select.all` |
 | Any printable rune | `insert.char` (payload: the rune) |
 
 ## Design Decisions
@@ -47,9 +50,9 @@ The `Handler` sits in a tight loop calling `screen.PollEvent()`. When an event a
 
 `tcell.PollEvent()` is a blocking call. If it ran in the main loop, the application couldn't process events from other sources (LSP responses, AI completions, Git status updates) while waiting for user input. The dedicated goroutine ensures the main loop is always responsive.
 
-### Hardcoded Keymap (Sprint 1)
+### Hardcoded Keymap
 
-The keymap is hardcoded in `handleKey()` for Sprint 1. Sprint 3 will extract this into a configurable keymap engine that:
+The keymap is hardcoded in `handleKey()`. A future phase will extract this into a configurable keymap engine that:
 - Loads bindings from TOML config
 - Resolves context-aware bindings (editor vs. file tree vs. popup)
 - Supports chord sequences and leader keys
@@ -57,28 +60,22 @@ The keymap is hardcoded in `handleKey()` for Sprint 1. Sprint 3 will extract thi
 
 The current structure already separates "what key was pressed" from "what action to run", making the extraction straightforward.
 
-### Mouse Handling (Sprint 2)
+### Mouse Handling
 
-Mouse events (`tcell.EventMouse`) are handled by `handleMouse()`. The handler converts tcell mouse events into actions:
+Mouse events (`tcell.EventMouse`) are handled by `handleMouse()`. The handler tracks Button1 state to distinguish click vs drag:
 
 | Mouse Event | Action ID | Payload |
 |-------------|-----------|---------|
-| Left click (`Button1`) | `mouse.click` | `MouseClickPayload{ScreenX, ScreenY}` |
+| Left click (press+release at same pos) | `mouse.click` | `MouseClickPayload{ScreenX, ScreenY}` |
+| Left drag (Button1 held + movement) | `mouse.drag` | `MouseDragPayload{AnchorX/Y, CurrentX/Y}` |
+| Right click (`Button2`) | `menu.open` | `MouseClickPayload{ScreenX, ScreenY}` |
 | Wheel up (`WheelUp`) | `mouse.scroll` | `MouseScrollPayload{Direction: -3}` |
 | Wheel down (`WheelDown`) | `mouse.scroll` | `MouseScrollPayload{Direction: 3}` |
-| Other (right click, drag, motion) | Ignored | — |
 
-The handler sends raw screen coordinates. Coordinate conversion (screen → buffer position) is done in the action itself, keeping the input handler free of editor/render dependencies.
-
-The `mouse.click` action:
-1. Ignores clicks on the statusline (screenY >= viewportHeight)
-2. Ignores clicks on the gutter (screenX < gutterWidth)
-3. Converts screen position to buffer row/col using `editor.GutterWidth()` and `editor.VisualColToByteOffset()`
-4. Handles tabs (snap to tab byte offset) and UTF-8 correctly
-5. Clamps to document bounds (past EOF → last line, past line end → end of line)
-
-The `mouse.scroll` action scrolls the viewport by 3 lines per wheel event and adjusts the cursor if it scrolls out of view.
+The handler sends raw screen coordinates. Coordinate conversion (screen → buffer position) is done in the action itself via the shared `screenToBufferPos()` helper, keeping the input handler free of editor/render dependencies.
 
 ### Ctrl Key Handling
 
 tcell represents Ctrl+letter combinations as special key constants (`KeyCtrlS`, `KeyCtrlQ`). The handler checks for `ModCtrl` modifier first, then falls through to special keys and rune events. This ordering ensures Ctrl combinations take priority over rune insertion.
+
+Note: `Ctrl+C` is intercepted by tcell before it can generate SIGINT, so it safely maps to `clipboard.copy`.

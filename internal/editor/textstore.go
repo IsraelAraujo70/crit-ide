@@ -15,7 +15,7 @@ type Range struct {
 }
 
 // TextStore is the abstract interface for all text storage backends.
-// Sprint 1 uses LineStore ([]string). Future sprints can swap to rope or piece table
+// Current implementation is LineStore ([]string). Can be swapped to rope or piece table
 // without touching any consumer code.
 //
 // Column positions (Col in Position) are byte offsets within a line's UTF-8 string.

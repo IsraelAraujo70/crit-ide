@@ -1,135 +1,54 @@
 {
   "project": "crit-ide",
   "version": "0.1.0-dev",
-  "sprints": [
+  "phases": [
     {
-      "id": 1,
       "name": "Foundation",
       "status": "done",
-      "completed_at": "2026-04-04",
       "summary": "Core event-driven architecture, single-buffer editing, tcell rendering",
       "deliverables": [
-        {
-          "item": "Go project scaffolding (go.mod, .gitignore, directory structure)",
-          "status": "done"
-        },
-        {
-          "item": "TextStore interface with LineStore ([]string) implementation",
-          "status": "done"
-        },
-        {
-          "item": "Buffer with cursor movement, Unicode-aware insert/delete, sticky column",
-          "status": "done"
-        },
-        {
-          "item": "Non-blocking event bus (channel-based)",
-          "status": "done"
-        },
-        {
-          "item": "Action interface, Registry, and 14 concrete actions",
-          "status": "done"
-        },
-        {
-          "item": "Input handler goroutine with hardcoded keymap",
-          "status": "done"
-        },
-        {
-          "item": "tcell renderer with line numbers, cursor, statusline",
-          "status": "done"
-        },
-        {
-          "item": "Main event loop (App.Run) serializing all state mutations",
-          "status": "done"
-        },
-        {
-          "item": "File open and save",
-          "status": "done"
-        },
-        {
-          "item": "42 unit tests covering editor core and actions",
-          "status": "done"
-        }
-      ],
-      "actions_registered": [
-        "cursor.up",
-        "cursor.down",
-        "cursor.left",
-        "cursor.right",
-        "cursor.home",
-        "cursor.end",
-        "insert.char",
-        "insert.newline",
-        "delete.backward",
-        "delete.forward",
-        "file.save",
-        "app.quit",
-        "scroll.up",
-        "scroll.down",
-        "mouse.click",
-        "mouse.scroll",
-        "mouse.drag",
-        "select.all",
-        "input.escape",
-        "clipboard.copy",
-        "clipboard.cut",
-        "clipboard.paste",
-        "menu.open",
-        "menu.close",
-        "menu.up",
-        "menu.down",
-        "menu.execute",
-        "menu.click"
-      ],
-      "keybindings": {
-        "Arrow Up": "cursor.up",
-        "Arrow Down": "cursor.down",
-        "Arrow Left": "cursor.left",
-        "Arrow Right": "cursor.right",
-        "Home": "cursor.home",
-        "End": "cursor.end",
-        "Enter": "insert.newline",
-        "Backspace": "delete.backward",
-        "Delete": "delete.forward",
-        "Tab": "insert.char (tab)",
-        "Ctrl+S": "file.save",
-        "Ctrl+Q": "app.quit",
-        "PageUp": "scroll.up",
-        "PageDown": "scroll.down",
-        "Any printable key": "insert.char",
-        "Ctrl+C": "clipboard.copy",
-        "Ctrl+X": "clipboard.cut",
-        "Ctrl+V": "clipboard.paste",
-        "Ctrl+A": "select.all",
-        "Escape": "input.escape",
-        "Left click": "mouse.click",
-        "Left drag": "mouse.drag",
-        "Right click": "menu.open",
-        "Wheel Up": "mouse.scroll (-3)",
-        "Wheel Down": "mouse.scroll (+3)"
-      }
+        { "item": "Go project scaffolding (go.mod, .gitignore, directory structure)", "status": "done" },
+        { "item": "TextStore interface with LineStore ([]string) implementation", "status": "done" },
+        { "item": "Buffer with cursor movement, Unicode-aware insert/delete, sticky column", "status": "done" },
+        { "item": "Non-blocking event bus (channel-based)", "status": "done" },
+        { "item": "Action interface, Registry, and concrete actions", "status": "done" },
+        { "item": "Input handler goroutine with hardcoded keymap", "status": "done" },
+        { "item": "tcell renderer with line numbers, cursor, statusline", "status": "done" },
+        { "item": "Main event loop (App.Run) serializing all state mutations", "status": "done" },
+        { "item": "File open and save", "status": "done" }
+      ]
     },
     {
-      "id": 2,
+      "name": "Mouse & Selection",
+      "status": "done",
+      "summary": "Full mouse support, text selection, clipboard, context menu",
+      "deliverables": [
+        { "item": "Mouse click to position cursor", "status": "done" },
+        { "item": "Mouse scroll for viewport", "status": "done" },
+        { "item": "Mouse drag to select text", "status": "done" },
+        { "item": "Selection rendering with highlight", "status": "done" },
+        { "item": "Selection-aware mutations (typing/delete replaces selection)", "status": "done" },
+        { "item": "System clipboard (Ctrl+C/X/V) via atotto/clipboard", "status": "done" },
+        { "item": "Select All (Ctrl+A)", "status": "done" },
+        { "item": "Right-click context menu (Copy/Cut/Paste/Select All)", "status": "done" },
+        { "item": "Modal input routing for context menu", "status": "done" },
+        { "item": "Popup rendering with borders and keyboard navigation", "status": "done" }
+      ]
+    },
+    {
       "name": "Multi-buffer & Splits",
       "status": "planned",
-      "summary": "BufferManager, multiple views, horizontal/vertical splits, statusline, mouse click/scroll",
+      "summary": "BufferManager, multiple views, horizontal/vertical splits",
       "deliverables": [
         { "item": "BufferManager for multiple open buffers", "status": "planned" },
         { "item": "EditorView decoupled from Buffer (multiple views per buffer)", "status": "planned" },
         { "item": "LayoutTree with horizontal/vertical splits", "status": "planned" },
         { "item": "Split resize via keyboard", "status": "planned" },
-        { "item": "Mouse click to position cursor", "status": "done" },
         { "item": "Mouse click to focus pane", "status": "planned" },
-        { "item": "Mouse scroll for viewport", "status": "done" },
-        { "item": "Mouse drag to select text", "status": "done" },
-        { "item": "Right-click context menu (Copy/Cut/Paste/Select All)", "status": "done" },
-        { "item": "Clipboard support (Ctrl+C/X/V)", "status": "done" },
-        { "item": "Select All (Ctrl+A)", "status": "done" },
         { "item": "Enhanced statusline with per-pane info", "status": "planned" }
       ]
     },
     {
-      "id": 3,
       "name": "Commands & Keymaps",
       "status": "planned",
       "summary": "Command registry, configurable keymap engine, command palette, fuzzy file open",
@@ -143,10 +62,9 @@
       ]
     },
     {
-      "id": 4,
       "name": "Visual Polish",
       "status": "planned",
-      "summary": "Syntax highlighting, file tree, project-wide search",
+      "summary": "Syntax highlighting, file tree, project-wide search, undo/redo",
       "deliverables": [
         { "item": "Syntax highlighting (regex-based V1, Tree-sitter V2)", "status": "planned" },
         { "item": "File explorer / tree panel", "status": "planned" },
@@ -155,7 +73,6 @@
       ]
     },
     {
-      "id": 5,
       "name": "LSP",
       "status": "planned",
       "summary": "Language Server Protocol integration",
@@ -169,7 +86,6 @@
       ]
     },
     {
-      "id": 6,
       "name": "Git",
       "status": "planned",
       "summary": "Git integration with status panel and diff viewer",
@@ -182,7 +98,6 @@
       ]
     },
     {
-      "id": 7,
       "name": "Terminal & Tasks",
       "status": "planned",
       "summary": "Embedded terminal pane and task runner",
@@ -194,7 +109,6 @@
       ]
     },
     {
-      "id": 8,
       "name": "AI Integration",
       "status": "planned",
       "summary": "Local AI autocomplete and code assistance",
@@ -206,5 +120,34 @@
         { "item": "Hot-reloadable TOML configuration", "status": "planned" }
       ]
     }
-  ]
+  ],
+  "actions_registered": [
+    "cursor.up", "cursor.down", "cursor.left", "cursor.right",
+    "cursor.home", "cursor.end",
+    "insert.char", "insert.newline",
+    "delete.backward", "delete.forward",
+    "file.save", "app.quit",
+    "scroll.up", "scroll.down",
+    "mouse.click", "mouse.scroll", "mouse.drag",
+    "select.all", "input.escape",
+    "clipboard.copy", "clipboard.cut", "clipboard.paste",
+    "menu.open", "menu.close", "menu.up", "menu.down", "menu.execute", "menu.click"
+  ],
+  "keybindings": {
+    "Arrow Up/Down/Left/Right": "cursor movement",
+    "Home / End": "cursor.home / cursor.end",
+    "PageUp / PageDown": "scroll.up / scroll.down",
+    "Enter": "insert.newline",
+    "Backspace / Delete": "delete.backward / delete.forward",
+    "Tab": "insert.char (tab)",
+    "Ctrl+S": "file.save",
+    "Ctrl+Q": "app.quit",
+    "Ctrl+C / Ctrl+X / Ctrl+V": "clipboard.copy / cut / paste",
+    "Ctrl+A": "select.all",
+    "Escape": "input.escape",
+    "Left click": "mouse.click",
+    "Left drag": "mouse.drag",
+    "Right click": "menu.open",
+    "Wheel Up/Down": "mouse.scroll"
+  }
 }

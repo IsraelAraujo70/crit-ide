@@ -196,7 +196,7 @@ func RegisterAll(r *Registry) {
 	r.Register(&scrollUp{})
 	r.Register(&scrollDown{})
 
-	// Mouse (Sprint 2).
+	// Mouse.
 	r.Register(&mouseClick{})
 	r.Register(&mouseScroll{})
 	r.Register(&mouseDrag{})

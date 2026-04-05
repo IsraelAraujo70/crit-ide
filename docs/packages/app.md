@@ -15,20 +15,21 @@ This is the architectural heart of crit-ide. The `Run()` method:
 ```
 1. Initialize tcell screen
 2. Create renderer
-3. Register all actions
-4. Load file (or create scratch buffer)
-5. Launch input goroutine
-6. Initial render
-7. Event loop:
+3. Initialize clipboard
+4. Register all actions
+5. Load file (or create scratch buffer)
+6. Launch input goroutine
+7. Initial render
+8. Event loop:
     for !quit {
         event ← bus.Recv()
         switch event.Type:
-            Action → registry.Execute(actionID, ctx) → ensureCursorVisible()
+            Action → route by InputMode → registry.Execute() → pendingActions → ensureCursorVisible()
             Resize → screen.Sync() → ensureCursorVisible()
             Quit   → set quit flag
         render()
     }
-8. Cleanup tcell screen
+9. Cleanup tcell screen
 ```
 
 ### Why This Design Matters
@@ -39,6 +40,17 @@ The event loop is the **single point of state mutation**. This eliminates race c
 - Actions run synchronously within the loop — they can freely mutate `Buffer`, `ScrollY`, etc.
 - Future async workers (LSP, Git, AI) will send results as events, consumed by this same loop
 - Rendering always sees a consistent state snapshot
+
+### Input Mode Routing
+
+The main loop routes events based on `InputMode`:
+
+- **ModeNormal**: All actions are executed normally.
+- **ModeContextMenu**: Only `menu.*` actions are allowed. Keyboard actions are remapped (arrows → menu navigation, Enter → execute, Escape → close). Mouse clicks are forwarded to `menu.click` which decides if the click is inside or outside the menu.
+
+### Pending Actions
+
+Menu execution uses a trampoline: `menu.execute` posts an action ID via `PostAction()`, then the main loop picks it up and executes it after the menu closes. This avoids actions needing access to the registry.
 
 ### `ensureCursorVisible()`
 
@@ -53,18 +65,22 @@ if cursorRow >= scrollY + height → scrollY = cursorRow - height + 1
 
 ```go
 type App struct {
-    screen   tcell.Screen
-    bus      *events.Bus
-    registry *actions.Registry
-    renderer *render.Renderer
-    buffer   *editor.Buffer
-    scrollY  int
-    quit     bool
-    filePath string
+    screen        tcell.Screen
+    bus           *events.Bus
+    registry      *actions.Registry
+    renderer      *render.Renderer
+    buffer        *editor.Buffer
+    scrollY       int
+    quit          bool
+    filePath      string
+    clip          ClipboardProvider
+    inputMode     InputMode
+    contextMenu   *editor.MenuState
+    pendingAction string
 }
 ```
 
-Sprint 1 has a single buffer. Sprint 2 will replace `buffer` with a `BufferManager` and add a `LayoutTree`.
+Currently has a single buffer. Will be replaced with a `BufferManager` and `LayoutTree` when multi-buffer support is added.
 
 ## `AppState` Interface Implementation
 
@@ -73,15 +89,16 @@ Sprint 1 has a single buffer. Sprint 2 will replace `buffer` with a `BufferManag
 | Method | Description |
 |--------|-------------|
 | `ActiveBuffer()` | Returns the currently focused buffer |
-| `ScrollY()` | Current vertical scroll offset |
-| `SetScrollY(y)` | Set scroll offset |
+| `ScrollY()` / `SetScrollY()` | Vertical scroll offset |
 | `ViewportHeight()` | Visible editor rows (screen height minus statusline) |
+| `ScreenWidth()` | Terminal width in columns |
 | `Quit()` | Sets the quit flag |
+| `Clipboard()` | Returns the clipboard provider |
+| `InputMode()` / `SetInputMode()` | Current input routing mode |
+| `ContextMenu()` / `SetContextMenu()` | Active context menu state |
+| `PostAction()` | Queue an action for the trampoline |
 
-This interface will grow as features are added:
-- Sprint 2: `BufferManager()`, `Layout()`
-- Sprint 5: `LSPManager()`
-- Sprint 6: `GitService()`
+This interface will grow as features are added (BufferManager, LSP, Git, etc.).
 
 ## Startup Flow
 
@@ -91,14 +108,15 @@ Run():
   ├─ tcell.NewScreen() + Init()
   ├─ EnableMouse()
   ├─ NewRenderer(screen)
-  ├─ RegisterAll(registry)      ← registers all 14 actions
+  ├─ SystemClipboard init
+  ├─ RegisterAll(registry)      ← registers all 28 actions
   ├─ LoadFile(filePath) or NewBuffer("scratch")
   ├─ go inputHandler.Run()      ← starts input goroutine
   ├─ render()                   ← initial frame
   └─ event loop                 ← blocks until quit
 ```
 
-## Concurrency Model (Sprint 1)
+## Concurrency Model
 
 ```
 ┌──────────────┐     Event Bus      ┌──────────────────┐
@@ -114,5 +132,5 @@ Two goroutines, zero locks. The bus channel is the only synchronization primitiv
 ## Error Handling
 
 - If the file doesn't exist at startup, a new file buffer is created with the given path (so the user can write and save)
-- Action execution errors are silently ignored in Sprint 1 (logged in future sprints)
+- Action execution errors are silently ignored (logging planned)
 - tcell initialization failures are fatal (returned from `Run`)

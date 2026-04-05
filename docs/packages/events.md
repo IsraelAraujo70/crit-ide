@@ -60,7 +60,7 @@ This is critical because the input goroutine calls `Send` synchronously from `Po
 
 ### Why Not a More Complex Event System?
 
-A channel is the simplest correct solution for Sprint 1's two-goroutine model. As more async workers (LSP, Git, AI) are added, the bus may evolve to support:
+A channel is the simplest correct solution for the current two-goroutine model. As more async workers (LSP, Git, AI) are added, the bus may evolve to support:
 - Event priorities (resize > action)
 - Event coalescing (multiple rapid resize events → single render)
 - Typed event channels per subsystem

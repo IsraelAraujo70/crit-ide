@@ -35,7 +35,7 @@ type TextStore interface {
 }
 ```
 
-**Why this matters**: Sprint 1 implements `TextStore` with a simple `[]string` (one string per line). When performance requires it, we can swap to a rope or piece table by implementing a new struct that satisfies this interface — without changing a single line in `buffer.go`, `actions/`, `render/`, or `app/`.
+**Why this matters**: The current `TextStore` is a simple `[]string` (one string per line). When performance requires it, we can swap to a rope or piece table by implementing a new struct that satisfies this interface — without changing a single line in `buffer.go`, `actions/`, `render/`, or `app/`.
 
 ### `LineStore`
 
@@ -50,7 +50,7 @@ The concrete `TextStore` implementation. Stores lines as `[]string`.
 
 ### `Buffer`
 
-Represents an open document with its cursor state. One buffer can be displayed in multiple views (future sprint).
+Represents an open document with cursor and selection state. One buffer can be displayed in multiple views (planned).
 
 ```go
 type Buffer struct {
@@ -87,6 +87,6 @@ type Buffer struct {
 
 1. **Byte-offset columns**: `CursorCol` is a byte offset, not a rune index. This avoids `[]rune` conversion on every operation and stays consistent with Go's string slicing. The renderer handles the byte-to-visual-column conversion.
 
-2. **No undo/redo yet**: The `Buffer` struct is designed to accommodate an `UndoManager` field in a future sprint. The `TextStore` interface's `Insert`/`Delete` operations are the natural points to capture undo entries.
+2. **No undo/redo yet**: The `Buffer` struct is designed to accommodate an `UndoManager` field. The `TextStore` interface's `Insert`/`Delete` operations are the natural points to capture undo entries.
 
-3. **No selections yet**: Multi-cursor and selection are planned for Sprint 2+. The cursor model is simple enough to extend without restructuring.
+3. **Single selection**: The `Selection` struct tracks anchor (drag start) and cursor (drag end) positions. Selection-aware mutations (`InsertChar`, `InsertNewline`, `DeleteBackward`, `DeleteForward`) replace or delete selected text. Multi-cursor is planned for later.

@@ -76,20 +76,30 @@ If the cursor is outside the visible viewport (shouldn't happen if `ensureCursor
 
 ## Design Decisions
 
-### Full Redraw (Sprint 1)
+### Full Redraw
 
-Sprint 1 does a full `Clear()` + redraw on every frame. This is simple and correct. For Sprint 2+, diff rendering (only redrawing changed cells) will improve performance, especially during fast typing. The tcell library supports cell-level diffing natively via `Show()` which only flushes changed cells to the terminal.
+Currently does a full `Clear()` + redraw on every frame. This is simple and correct. Diff rendering (only redrawing changed cells) will improve performance, especially during fast typing. The tcell library supports cell-level diffing natively via `Show()` which only flushes changed cells to the terminal.
+
+### Selection Highlighting
+
+When a buffer has an active selection, the renderer applies `selectionStyle` (black on light gray) to characters within the selection range. The normalized selection range is precomputed once per frame, and per-line byte ranges are calculated to determine which characters to highlight.
+
+### Popup Menu Rendering
+
+When `ViewState.Popup` is non-nil, the renderer draws a context menu on top of the editor content after the main drawing pass. The popup uses box-drawing characters for borders, highlights the selected item, and auto-clamps its position to stay within screen bounds.
 
 ### Statusline
 
-The statusline occupies the last row of the terminal. `editorHeight = Height - 1`. This is a fixed layout for Sprint 1. Sprint 2 will introduce a flexible panel system.
+The statusline occupies the last row of the terminal. `editorHeight = Height - 1`. A future phase will introduce a flexible panel system.
 
 ### Style Constants
 
-Colors are defined inline in Sprint 1:
+Colors are defined inline:
 - Default text: white on default background
+- Selected text: black on light gray
 - Gutter: gray on default background
 - Current line gutter: bright white
 - Statusline: black on white (inverted)
+- Popup menu: white on dark blue, selected item inverted
 
-Sprint 4 will introduce a theme system with TOML-configurable color schemes.
+A theme system with TOML-configurable color schemes is planned.

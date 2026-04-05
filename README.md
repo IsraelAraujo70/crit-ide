@@ -8,9 +8,7 @@ crit-ide aims to be a professional development environment that runs entirely in
 
 ## Status
 
-**Sprint 1 complete** — core foundation is working. See [progress](docs/progress.json) for details.
-
-You can open a file, edit it, navigate with cursor/scroll, save, and quit. The event-driven architecture, action system, and rendering pipeline are in place.
+Core editing with mouse support is working. See [progress](docs/progress.json) for details.
 
 ## Quick Start
 
@@ -19,7 +17,7 @@ go build -o crit-ide ./cmd/ide
 ./crit-ide path/to/file.go
 ```
 
-### Keybindings (Sprint 1)
+### Keybindings
 
 | Key | Action |
 |-----|--------|
@@ -31,6 +29,18 @@ go build -o crit-ide ./cmd/ide
 | Tab | Insert tab |
 | Ctrl+S | Save file |
 | Ctrl+Q | Quit |
+| Ctrl+C / Ctrl+X / Ctrl+V | Copy / Cut / Paste |
+| Ctrl+A | Select all |
+| Escape | Clear selection |
+
+### Mouse
+
+| Action | Behavior |
+|--------|----------|
+| Left click | Position cursor |
+| Left drag | Select text |
+| Right click | Context menu (Copy, Cut, Paste, Select All) |
+| Wheel up/down | Scroll viewport |
 
 ## Architecture
 
@@ -51,25 +61,27 @@ Input Goroutine → Event Bus → Main Event Loop → Action → State Mutation 
 cmd/ide/            Entry point
 internal/
 ├── app/            Main event loop, AppState
-├── editor/         Buffer, TextStore, cursor, file I/O
+├── editor/         Buffer, TextStore, Selection, cursor, file I/O
 ├── events/         Event bus (non-blocking channel)
-├── actions/        Action interface, registry, 14 concrete actions
-├── input/          Input goroutine, keymap translation
-└── render/         tcell renderer, line numbers, statusline
+├── actions/        Action interface, registry, 28 concrete actions
+├── input/          Input goroutine, keymap translation, mouse/drag handling
+├── render/         tcell renderer, line numbers, statusline, popup menus
+└── clipboard/      System clipboard abstraction
 ```
 
 ## Roadmap
 
-| Sprint | Focus | Status |
-|--------|-------|--------|
-| 1 | Foundation — event loop, buffer, cursor, rendering | ✅ Done |
-| 2 | Multi-buffer, splits, mouse | Planned |
-| 3 | Command registry, configurable keymaps, command palette, fuzzy open | Planned |
-| 4 | Syntax highlighting, file tree, project search | Planned |
-| 5 | LSP — diagnostics, hover, definition, completion | Planned |
-| 6 | Git — status panel, diff viewer, stage/unstage | Planned |
-| 7 | Terminal pane, tasks, problem matcher | Planned |
-| 8 | AI inline completion, explain selection | Planned |
+| Phase | Focus | Status |
+|-------|-------|--------|
+| Foundation | Event loop, buffer, cursor, rendering, file I/O | Done |
+| Mouse & Selection | Click, drag select, scroll, right-click menu, clipboard | Done |
+| Multi-buffer | BufferManager, splits, tabbed views | Planned |
+| Commands | Command registry, configurable keymaps, command palette, fuzzy open | Planned |
+| Visual | Syntax highlighting, file tree, project search | Planned |
+| Language | LSP — diagnostics, hover, definition, completion | Planned |
+| Git | Status panel, diff viewer, stage/unstage | Planned |
+| Terminal | Terminal pane, tasks, problem matcher | Planned |
+| AI | Inline completion, explain selection | Planned |
 
 ## Tech Stack
 
@@ -82,13 +94,14 @@ internal/
 | Git | Shell out to `git` |
 | AI | Ollama (local) |
 | Text storage | LineStore now, rope/piece table later (behind interface) |
+| Clipboard | [atotto/clipboard](https://github.com/atotto/clipboard) |
 
 ## Documentation
 
 - **[Product Requirements](docs/prd.md)** — vision, scope, architecture overview
-- **[Progress Tracker](docs/progress.json)** — sprint status and deliverables
+- **[Progress Tracker](docs/progress.json)** — feature status and deliverables
 - **[Package Docs](docs/packages/)** — how each implemented package works
-- **[Feature Specs](docs/spec/)** — detailed specifications for future sprints
+- **[Feature Specs](docs/spec/)** — detailed specifications for future features
 
 ## Design Principles
 

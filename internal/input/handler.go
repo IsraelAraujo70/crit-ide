@@ -115,7 +115,7 @@ func (h *Handler) handleMouse(ev *tcell.EventMouse) {
 }
 
 // handleKey translates a tcell key event into an action event.
-// Sprint 1: hardcoded keymap. Sprint 3 will extract this to a configurable keymap engine.
+// Hardcoded keymap. Will be replaced by a configurable keymap engine.
 func (h *Handler) handleKey(ev *tcell.EventKey) {
 	// Check for modifier+key combinations first.
 	if ev.Modifiers()&tcell.ModCtrl != 0 {

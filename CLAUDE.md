@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-crit-ide is a terminal IDE written in Go. Non-modal, action-driven, event-loop based. Currently at Sprint 1 (core foundation).
+crit-ide is a terminal IDE written in Go. Non-modal, action-driven, event-loop based.
 
 ## Build & Test
 
@@ -30,12 +30,13 @@ Input Goroutine (tcell.PollEvent) → Event Bus → Main Loop → Action → Ren
 ## Package Dependency Rules
 
 ```
-editor  → nothing (pure types)
-events  → nothing (types + channel)
-actions → editor, events
-input   → events, tcell
-render  → editor, tcell
-app     → all of the above
+editor    → nothing (pure types)
+events    → nothing (types + channel)
+clipboard → atotto/clipboard (external only)
+actions   → editor, events
+input     → events, tcell
+render    → editor, tcell
+app       → all of the above
 ```
 
 **Never create circular imports.** Actions access app state through the `AppState` interface, not by importing the `app` package.
@@ -65,7 +66,14 @@ type AppState interface {
     ScrollY() int
     SetScrollY(y int)
     ViewportHeight() int
+    ScreenWidth() int
     Quit()
+    Clipboard() ClipboardProvider
+    InputMode() InputMode
+    SetInputMode(mode InputMode)
+    ContextMenu() *editor.MenuState
+    SetContextMenu(menu *editor.MenuState)
+    PostAction(actionID string)
 }
 ```
 
@@ -74,7 +82,7 @@ type AppState interface {
 1. Create a struct implementing `Action` in `internal/actions/`
 2. Register it in `RegisterAll()` in `editor_actions.go`
 3. Map a key to its ID in `internal/input/handler.go`
-4. Add tests in `editor_actions_test.go`
+4. Add tests in the appropriate `_test.go` file
 
 ## Adding a New Feature / Service
 
@@ -98,19 +106,21 @@ type AppState interface {
 ```
 docs/
 ├── prd.md              # Product vision, scope, roadmap
-├── progress.json       # Sprint tracker (done/planned)
+├── progress.json       # Progress tracker (done/planned)
 ├── packages/           # How implemented code works (update when code changes)
-└── spec/               # Feature specs for future sprints (reference when implementing)
+└── spec/               # Feature specs (reference when implementing)
 ```
 
-## Current State (Sprint 1)
+## Current State
 
-- Single buffer editing
-- 14 registered actions (cursor, edit, file, scroll, quit)
-- Hardcoded keymap (configurable keymap in Sprint 3)
-- Full redraw rendering (diff rendering in Sprint 2+)
-- No undo/redo, no splits, no mouse click, no syntax highlighting, no LSP, no Git, no AI
+- Single buffer editing with text selection
+- 28 registered actions (cursor, edit, file, scroll, mouse, clipboard, selection, context menu)
+- Mouse: click, drag-select, wheel scroll, right-click context menu
+- Clipboard: Ctrl+C/X/V, system clipboard via atotto/clipboard
+- Hardcoded keymap (configurable keymap engine planned)
+- Full redraw rendering (diff rendering planned)
+- No undo/redo, no splits, no syntax highlighting, no LSP, no Git, no AI
 
-## What's Next (Sprint 2)
+## Roadmap
 
-BufferManager, multiple views per buffer, LayoutTree with splits, mouse click/scroll, enhanced statusline. See `docs/progress.json` for full roadmap.
+See `docs/progress.json` for full feature tracker and `docs/prd.md` for the development phases.

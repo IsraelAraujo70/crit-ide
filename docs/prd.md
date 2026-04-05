@@ -162,12 +162,13 @@ No locks on core state. Workers send results as events. The main loop is the sin
 
 | Phase | Focus | Key Deliverables |
 |-------|-------|-----------------|
-| **Sprint 1** | Foundation | Event loop, buffer, cursor, rendering, file I/O |
-| **Sprint 2** | Multi-buffer | BufferManager, splits, statusline, mouse |
-| **Sprint 3** | Commands | Command registry, keymap engine, command palette, fuzzy open |
-| **Sprint 4** | Visual | Syntax highlighting, file tree, project search |
-| **Sprint 5** | Language | LSP (definition, hover, diagnostics, completion) |
-| **Sprint 6** | Git | Status panel, diff viewer, stage/unstage |
-| **Sprint 7** | Terminal | Terminal pane, tasks, problem matcher |
-| **Sprint 8** | AI | Inline completion, explain selection, config reload |
-| **Post-V1** | Plugins | Plugin API, external process plugins |
+| **Foundation** | Core | Event loop, buffer, cursor, rendering, file I/O |
+| **Mouse & Selection** | Input | Click, drag select, scroll, context menu, clipboard |
+| **Multi-buffer** | Layout | BufferManager, splits, statusline |
+| **Commands** | Input | Command registry, keymap engine, command palette, fuzzy open |
+| **Visual** | UI | Syntax highlighting, file tree, project search |
+| **Language** | LSP | LSP (definition, hover, diagnostics, completion) |
+| **Git** | VCS | Status panel, diff viewer, stage/unstage |
+| **Terminal** | Shell | Terminal pane, tasks, problem matcher |
+| **AI** | Intelligence | Inline completion, explain selection, config reload |
+| **Post-V1** | Extensibility | Plugin API, external process plugins |

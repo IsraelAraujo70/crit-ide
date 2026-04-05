@@ -6,8 +6,12 @@ The actions package defines the Action system — the **single mechanism** for m
 
 | File | Purpose |
 |------|---------|
-| `action.go` | `Action` interface, `ActionContext`, `AppState` interface, `Registry` |
-| `editor_actions.go` | All 14 concrete actions for Sprint 1 |
+| `action.go` | `Action` interface, `ActionContext`, `AppState` interface, `Registry`, `InputMode`, `ClipboardProvider` |
+| `editor_actions.go` | Cursor, text editing, file, scroll actions + `RegisterAll()` |
+| `mouse_actions.go` | Mouse click and scroll actions |
+| `selection_actions.go` | Drag selection, select all, escape, shared `screenToBufferPos()` helper |
+| `clipboard_actions.go` | Copy, cut, paste actions |
+| `menu_actions.go` | Context menu open/close/navigate/execute/click actions |
 
 ## Key Types
 
@@ -57,7 +61,7 @@ actions.RegisterAll(reg)
 reg.Execute("cursor.up", ctx)  // Looks up and runs the action
 ```
 
-## Registered Actions (Sprint 1)
+## Registered Actions
 
 | ID | Description | Category |
 |----|-------------|----------|
