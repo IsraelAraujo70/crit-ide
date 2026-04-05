@@ -120,8 +120,8 @@ func (a *treeClick) Run(ctx *ActionContext) error {
 	}
 
 	// Calculate the row within the tree viewport.
-	// Tab bar is 1 row and EXPLORER header is 1 row, so tree content starts at screenY=2.
-	treeRow := payload.ScreenY - 2 // Subtract tab bar (1) + header (1).
+	// Tab bar (1) + focus border (1) + EXPLORER header (1) = 3 rows before tree content.
+	treeRow := payload.ScreenY - 3
 	if treeRow < 0 {
 		return nil
 	}

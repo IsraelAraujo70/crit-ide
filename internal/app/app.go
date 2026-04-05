@@ -326,10 +326,11 @@ func (a *App) editorWidth(totalWidth int) int {
 	return totalWidth
 }
 
-// treeViewportHeight returns the height available for tree content (minus tab bar, header, statusline).
+// treeViewportHeight returns the height available for tree content.
 func (a *App) treeViewportHeight() int {
 	_, h := a.screen.Size()
-	tvh := h - 3 // tab bar (1) + header (1) + statusline (1)
+	// tab bar (1) + top border (1) + tree header (1) + statusline (1) = 4
+	tvh := h - 4
 	if tvh < 1 {
 		tvh = 1
 	}
@@ -388,12 +389,7 @@ func (a *App) render() {
 
 // ensureCursorVisible adjusts scrollY so the cursor is within the viewport.
 func (a *App) ensureCursorVisible() {
-	_, h := a.screen.Size()
-	tabBarHeight := 1
-	editorHeight := h - tabBarHeight - 1 // Statusline takes 1 row.
-	if editorHeight < 1 {
-		editorHeight = 1
-	}
+	editorHeight := a.ViewportHeight()
 
 	buf := a.ActiveBuffer()
 	sy := a.scrollY()
@@ -494,8 +490,8 @@ func (a *App) SetScrollY(y int) {
 // ViewportHeight returns the number of visible editor rows (excluding tab bar and statusline).
 func (a *App) ViewportHeight() int {
 	_, h := a.screen.Size()
-	tabBarHeight := 1
-	eh := h - tabBarHeight - 1 // statusline
+	// tab bar (1) + focus border (1) + statusline (1) = 3 reserved rows
+	eh := h - 3
 	if eh < 1 {
 		return 1
 	}
@@ -631,14 +627,25 @@ func (a *App) SetFileTreeVisible(v bool) {
 	a.treeVisible = v
 }
 
-// ToggleFileTree toggles the file tree visibility.
+// ToggleFileTree toggles focus between editor and file tree.
+// If the tree is hidden, it shows it and focuses it.
+// If the tree is visible and editor has focus, focus moves to tree.
+// If the tree is visible and tree has focus, focus moves to editor.
 func (a *App) ToggleFileTree() {
-	a.treeVisible = !a.treeVisible
-	if a.treeVisible && a.tree == nil {
-		a.initFileTree()
+	if !a.treeVisible {
+		// Tree hidden → show and focus.
+		a.treeVisible = true
+		if a.tree == nil {
+			a.initFileTree()
+		}
+		a.focusArea = actions.FocusFileTree
+		return
 	}
-	if !a.treeVisible && a.focusArea == actions.FocusFileTree {
+	// Tree visible → toggle focus.
+	if a.focusArea == actions.FocusFileTree {
 		a.focusArea = actions.FocusEditor
+	} else {
+		a.focusArea = actions.FocusFileTree
 	}
 }
 

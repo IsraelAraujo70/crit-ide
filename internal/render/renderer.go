@@ -86,8 +86,29 @@ func (r *Renderer) Render(vs *ViewState) {
 		editorWidth = 10
 	}
 
+	// Focus border color.
+	focusBorderColor := tcell.NewRGBColor(80, 140, 255)
+	dimBorderColor := tcell.NewRGBColor(50, 50, 50)
+
 	// --- Draw tab bar (row 0) ---
 	r.drawTabBar(vs, editorWidth, treeWidth)
+
+	// --- Draw editor top border (row between tab bar and content) ---
+	editorBorderColor := dimBorderColor
+	if !vs.TreeFocused {
+		editorBorderColor = focusBorderColor
+	}
+	editorBorderStyle := tcell.StyleDefault.Foreground(editorBorderColor).Background(tcell.ColorDefault)
+	for x := 0; x < editorWidth; x++ {
+		r.screen.SetContent(x, tabBarHeight, tcell.RuneHLine, nil, editorBorderStyle)
+	}
+
+	// Adjust: content starts after the border line.
+	contentStartY := tabBarHeight + 1
+	editorHeight = vs.Height - tabBarHeight - 1 - statuslineHeight // -1 for border
+	if editorHeight < 1 {
+		editorHeight = 1
+	}
 
 	// --- Draw editor area ---
 	gutterWidth := r.gutterWidth(vs.Buffer.Text.LineCount())
@@ -111,7 +132,7 @@ func (r *Renderer) Render(vs *ViewState) {
 	}
 
 	for row := 0; row < editorHeight; row++ {
-		screenRow := tabBarHeight + row
+		screenRow := contentStartY + row
 		lineIdx := vs.ScrollY + row
 		if lineIdx >= vs.Buffer.Text.LineCount() {
 			// Draw tilde for lines beyond the document.
@@ -173,11 +194,15 @@ func (r *Renderer) Render(vs *ViewState) {
 
 	// --- Draw file tree (right panel) ---
 	if vs.TreeVisible {
-		r.drawFileTree(vs, editorWidth, treeWidth, tabBarHeight, editorHeight)
+		treeBorderColor := dimBorderColor
+		if vs.TreeFocused {
+			treeBorderColor = focusBorderColor
+		}
+		r.drawFileTree(vs, editorWidth, treeWidth, tabBarHeight, editorHeight+1, treeBorderColor)
 	}
 
 	// --- Draw statusline or prompt ---
-	statuslineRow := tabBarHeight + editorHeight
+	statuslineRow := contentStartY + editorHeight
 	if vs.Prompt != nil {
 		r.drawPrompt(vs.Prompt, statuslineRow, vs.Width)
 	} else {
@@ -192,9 +217,9 @@ func (r *Renderer) Render(vs *ViewState) {
 			r.screen.ShowCursor(promptCursorX, statuslineRow)
 		}
 	} else {
-		cursorScreenRow := vs.Buffer.CursorRow - vs.ScrollY + tabBarHeight
+		cursorScreenRow := vs.Buffer.CursorRow - vs.ScrollY + contentStartY
 		cursorScreenCol := r.screenCol(vs.Buffer, gutterWidth)
-		if !vs.TreeFocused && cursorScreenRow >= tabBarHeight && cursorScreenRow < tabBarHeight+editorHeight {
+		if !vs.TreeFocused && cursorScreenRow >= contentStartY && cursorScreenRow < contentStartY+editorHeight {
 			r.screen.ShowCursor(cursorScreenCol, cursorScreenRow)
 		} else {
 			r.screen.HideCursor()
@@ -259,10 +284,10 @@ func (r *Renderer) drawTabBar(vs *ViewState, editorWidth, treeWidth int) {
 }
 
 // drawFileTree renders the file tree panel on the right side.
-func (r *Renderer) drawFileTree(vs *ViewState, startX, treeWidth, startY, height int) {
+func (r *Renderer) drawFileTree(vs *ViewState, startX, treeWidth, startY, height int, borderColor tcell.Color) {
 	treeBg := tcell.NewRGBColor(24, 24, 24)
 	borderStyle := tcell.StyleDefault.
-		Foreground(tcell.NewRGBColor(60, 60, 60)).
+		Foreground(borderColor).
 		Background(treeBg)
 	headerStyle := tcell.StyleDefault.
 		Foreground(tcell.NewRGBColor(180, 180, 180)).
@@ -279,8 +304,15 @@ func (r *Renderer) drawFileTree(vs *ViewState, startX, treeWidth, startY, height
 		Background(tcell.NewRGBColor(55, 55, 75)).
 		Bold(true)
 
+	// Draw top border of the tree panel.
+	topBorderStyle := tcell.StyleDefault.Foreground(borderColor).Background(tcell.ColorDefault)
+	r.screen.SetContent(startX, startY, tcell.RuneTTee, nil, topBorderStyle)
+	for x := startX + 1; x < startX+treeWidth; x++ {
+		r.screen.SetContent(x, startY, tcell.RuneHLine, nil, topBorderStyle)
+	}
+
 	// Draw vertical border (separator between editor and tree).
-	for row := 0; row < height; row++ {
+	for row := 1; row < height; row++ {
 		r.screen.SetContent(startX, startY+row, tcell.RuneVLine, nil, borderStyle)
 	}
 
@@ -291,18 +323,19 @@ func (r *Renderer) drawFileTree(vs *ViewState, startX, treeWidth, startY, height
 	}
 
 	// Draw header.
+	headerRow := startY + 1
 	header := " EXPLORER"
 	for j := 0; j < contentW; j++ {
 		ch := ' '
 		if j < len(header) {
 			ch = rune(header[j])
 		}
-		r.screen.SetContent(contentX+j, startY, ch, nil, headerStyle)
+		r.screen.SetContent(contentX+j, headerRow, ch, nil, headerStyle)
 	}
 
 	// Draw tree nodes.
-	treeContentStart := startY + 1
-	treeContentHeight := height - 1
+	treeContentStart := startY + 2 // After top border + header.
+	treeContentHeight := height - 2
 	if treeContentHeight < 1 {
 		return
 	}
@@ -326,8 +359,15 @@ func (r *Renderer) drawFileTree(vs *ViewState, startX, treeWidth, startY, height
 		if node.IsDir {
 			style = dirStyle
 		}
-		if nodeIdx == vs.TreeCursor && vs.TreeFocused {
-			style = cursorStyle
+		if nodeIdx == vs.TreeCursor {
+			if vs.TreeFocused {
+				style = cursorStyle
+			} else {
+				// Dim cursor when tree is not focused.
+				style = tcell.StyleDefault.
+					Foreground(tcell.NewRGBColor(200, 200, 200)).
+					Background(tcell.NewRGBColor(40, 40, 40))
+			}
 		}
 
 		// Build display line: indent + icon + name.
