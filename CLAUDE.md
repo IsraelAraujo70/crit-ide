@@ -33,10 +33,11 @@ Input Goroutine (tcell.PollEvent) → Event Bus → Main Loop → Action → Ren
 editor    → nothing (pure types)
 events    → nothing (types + channel)
 clipboard → atotto/clipboard (external only)
+filetree  → nothing (os, path/filepath, sort, strings)
 actions   → editor, events
 input     → events, tcell
 render    → editor, tcell
-app       → all of the above
+app       → all of the above (including filetree)
 ```
 
 **Never create circular imports.** Actions access app state through the `AppState` interface, not by importing the `app` package.
@@ -74,6 +75,21 @@ type AppState interface {
     ContextMenu() *editor.MenuState
     SetContextMenu(menu *editor.MenuState)
     PostAction(actionID string)
+    // Tab / multi-buffer
+    Buffers() []*editor.Buffer
+    ActiveBufferIndex() int
+    OpenFile(path string) error
+    CloseBuffer(idx int)
+    SwitchBuffer(idx int)
+    // File tree
+    FileTree() FileTreeState
+    FileTreeVisible() bool
+    SetFileTreeVisible(v bool)
+    ToggleFileTree()
+    FileTreeWidth() int
+    // Focus
+    FocusArea() FocusArea
+    SetFocusArea(area FocusArea)
 }
 ```
 
@@ -113,10 +129,14 @@ docs/
 
 ## Current State
 
-- Single buffer editing with text selection
-- 28 registered actions (cursor, edit, file, scroll, mouse, clipboard, selection, context menu)
-- Mouse: click, drag-select, wheel scroll, right-click context menu
+- Multi-buffer editing with tab bar and text selection
+- File tree panel (NeoTree-style) on the right side with toggle (Ctrl+B)
+- 41 registered actions (cursor, edit, file, scroll, mouse, clipboard, selection, context menu, file tree, tabs)
+- Mouse: click, drag-select, wheel scroll, right-click context menu, tab click, tree click
 - Clipboard: Ctrl+C/X/V, system clipboard via atotto/clipboard
+- Tab management: Ctrl+W close, Ctrl+PgDn/PgUp switch, mouse click tabs
+- File tree: keyboard navigation (arrows, Enter), expand/collapse dirs, click to open
+- Focus routing: editor vs file tree, with smart action remapping
 - Hardcoded keymap (configurable keymap engine planned)
 - Full redraw rendering (diff rendering planned)
 - No undo/redo, no splits, no syntax highlighting, no LSP, no Git, no AI

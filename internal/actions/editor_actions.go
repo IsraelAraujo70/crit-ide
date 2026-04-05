@@ -217,4 +217,21 @@ func RegisterAll(r *Registry) {
 	r.Register(&menuDown{})
 	r.Register(&menuExecute{})
 	r.Register(&menuClick{})
+
+	// File tree.
+	r.Register(&treeToggleVisible{})
+	r.Register(&treeUp{})
+	r.Register(&treeDown{})
+	r.Register(&treeEnter{})
+	r.Register(&treeExpand{})
+	r.Register(&treeCollapse{})
+	r.Register(&treeClick{})
+	r.Register(&treeFocusEditor{})
+	r.Register(&treeRefresh{})
+
+	// Tabs.
+	r.Register(&tabNext{})
+	r.Register(&tabPrev{})
+	r.Register(&tabClose{})
+	r.Register(&tabClick{})
 }

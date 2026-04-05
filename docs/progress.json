@@ -36,11 +36,41 @@
       ]
     },
     {
-      "name": "Multi-buffer & Splits",
-      "status": "planned",
-      "summary": "BufferManager, multiple views, horizontal/vertical splits",
+      "name": "Multi-buffer & Tabs",
+      "status": "done",
+      "summary": "Multi-buffer tab system with tab bar UI",
       "deliverables": [
-        { "item": "BufferManager for multiple open buffers", "status": "planned" },
+        { "item": "Multi-buffer management (open, close, switch)", "status": "done" },
+        { "item": "Tab bar rendering with active indicator and dirty flag", "status": "done" },
+        { "item": "Tab click to switch, close button on tabs", "status": "done" },
+        { "item": "Ctrl+PgDn/PgUp for tab navigation", "status": "done" },
+        { "item": "Ctrl+W to close tab", "status": "done" },
+        { "item": "Per-buffer scroll position preservation", "status": "done" },
+        { "item": "Open file from tree into new tab (or switch to existing)", "status": "done" }
+      ]
+    },
+    {
+      "name": "File Tree (NeoTree)",
+      "status": "done",
+      "summary": "File explorer panel on the right side with keyboard and mouse navigation",
+      "deliverables": [
+        { "item": "FileTree package with Node/tree state management", "status": "done" },
+        { "item": "Directory reading, sorting (dirs first), hidden file filtering", "status": "done" },
+        { "item": "Tree rendering with icons, indentation, and cursor highlight", "status": "done" },
+        { "item": "Keyboard navigation (arrows, Enter, Escape)", "status": "done" },
+        { "item": "Expand/collapse directories", "status": "done" },
+        { "item": "Click on tree to open file or toggle directory", "status": "done" },
+        { "item": "Ctrl+B to toggle tree visibility", "status": "done" },
+        { "item": "Mouse scroll in tree panel", "status": "done" },
+        { "item": "Focus routing between editor and tree", "status": "done" },
+        { "item": "Tree refresh preserving expanded state", "status": "done" }
+      ]
+    },
+    {
+      "name": "Splits",
+      "status": "planned",
+      "summary": "Horizontal/vertical splits with multiple views per buffer",
+      "deliverables": [
         { "item": "EditorView decoupled from Buffer (multiple views per buffer)", "status": "planned" },
         { "item": "LayoutTree with horizontal/vertical splits", "status": "planned" },
         { "item": "Split resize via keyboard", "status": "planned" },
@@ -131,23 +161,30 @@
     "mouse.click", "mouse.scroll", "mouse.drag",
     "select.all", "input.escape",
     "clipboard.copy", "clipboard.cut", "clipboard.paste",
-    "menu.open", "menu.close", "menu.up", "menu.down", "menu.execute", "menu.click"
+    "menu.open", "menu.close", "menu.up", "menu.down", "menu.execute", "menu.click",
+    "tree.toggle", "tree.up", "tree.down", "tree.enter", "tree.expand", "tree.collapse",
+    "tree.click", "tree.focus.editor", "tree.refresh",
+    "tab.next", "tab.prev", "tab.close", "tab.click"
   ],
   "keybindings": {
-    "Arrow Up/Down/Left/Right": "cursor movement",
+    "Arrow Up/Down/Left/Right": "cursor movement (or tree nav when tree focused)",
     "Home / End": "cursor.home / cursor.end",
     "PageUp / PageDown": "scroll.up / scroll.down",
-    "Enter": "insert.newline",
+    "Enter": "insert.newline (or tree.enter when tree focused)",
     "Backspace / Delete": "delete.backward / delete.forward",
     "Tab": "insert.char (tab)",
     "Ctrl+S": "file.save",
     "Ctrl+Q": "app.quit",
     "Ctrl+C / Ctrl+X / Ctrl+V": "clipboard.copy / cut / paste",
     "Ctrl+A": "select.all",
-    "Escape": "input.escape",
-    "Left click": "mouse.click",
+    "Ctrl+B": "tree.toggle",
+    "Ctrl+W": "tab.close",
+    "Ctrl+PageDown": "tab.next",
+    "Ctrl+PageUp": "tab.prev",
+    "Escape": "input.escape (or tree.focus.editor when tree focused)",
+    "Left click": "mouse.click / tab.click / tree.click (auto-routed by position)",
     "Left drag": "mouse.drag",
     "Right click": "menu.open",
-    "Wheel Up/Down": "mouse.scroll"
+    "Wheel Up/Down": "mouse.scroll (editor or tree, auto-routed)"
   }
 }

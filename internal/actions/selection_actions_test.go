@@ -14,10 +14,10 @@ func TestMouseDrag_BasicSelection(t *testing.T) {
 	buf := newBufferWithLines("hello", "world")
 	app := &mockApp{buffer: buf, vpHeight: 24, clipboard: &mockClipboard{}}
 
-	// gutterWidth=4 for 2 lines.
-	// Drag from (4,0) to (8,0) → visualCol 0 to visualCol 4 → byte 0 to byte 4.
+	// gutterWidth=4 for 2 lines. screenY=1 (after tab bar).
+	// Drag from (4,1) to (8,1) → visualCol 0 to visualCol 4 → byte 0 to byte 4.
 	ctx := newTestContext(app, "mouse.drag", events.MouseDragPayload{
-		AnchorX: 4, AnchorY: 0, CurrentX: 8, CurrentY: 0,
+		AnchorX: 4, AnchorY: 1, CurrentX: 8, CurrentY: 1,
 	})
 	reg.Execute("mouse.drag", ctx)
 
@@ -41,9 +41,9 @@ func TestMouseDrag_MultiLine(t *testing.T) {
 	buf := newBufferWithLines("hello", "world")
 	app := &mockApp{buffer: buf, vpHeight: 24, clipboard: &mockClipboard{}}
 
-	// Drag from line 0 col 2 to line 1 col 3.
+	// Drag from line 0 col 2 to line 1 col 3. screenY offset +1 for tab bar.
 	ctx := newTestContext(app, "mouse.drag", events.MouseDragPayload{
-		AnchorX: 6, AnchorY: 0, CurrentX: 7, CurrentY: 1,
+		AnchorX: 6, AnchorY: 1, CurrentX: 7, CurrentY: 2,
 	})
 	reg.Execute("mouse.drag", ctx)
 
@@ -63,9 +63,9 @@ func TestMouseDrag_ReverseSelection(t *testing.T) {
 	buf := newBufferWithLines("hello")
 	app := &mockApp{buffer: buf, vpHeight: 24, clipboard: &mockClipboard{}}
 
-	// Drag right-to-left.
+	// Drag right-to-left. screenY=1 (after tab bar).
 	ctx := newTestContext(app, "mouse.drag", events.MouseDragPayload{
-		AnchorX: 8, AnchorY: 0, CurrentX: 5, CurrentY: 0,
+		AnchorX: 8, AnchorY: 1, CurrentX: 5, CurrentY: 1,
 	})
 	reg.Execute("mouse.drag", ctx)
 
@@ -83,7 +83,8 @@ func TestMouseClick_ClearsSelection(t *testing.T) {
 	buf.SetSelection(editor.Position{Line: 0, Col: 0}, editor.Position{Line: 0, Col: 5})
 	app := &mockApp{buffer: buf, vpHeight: 24, clipboard: &mockClipboard{}}
 
-	ctx := newTestContext(app, "mouse.click", events.MouseClickPayload{ScreenX: 5, ScreenY: 0})
+	// screenY=1 (after tab bar) to hit editor area.
+	ctx := newTestContext(app, "mouse.click", events.MouseClickPayload{ScreenX: 5, ScreenY: 1})
 	reg.Execute("mouse.click", ctx)
 
 	if buf.HasSelection() {

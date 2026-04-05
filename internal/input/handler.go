@@ -138,6 +138,24 @@ func (h *Handler) handleKey(ev *tcell.EventKey) {
 		case tcell.KeyCtrlA:
 			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "select.all"})
 			return
+		case tcell.KeyCtrlB:
+			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "tree.toggle"})
+			return
+		case tcell.KeyCtrlW:
+			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "tab.close"})
+			return
+		}
+	}
+
+	// Tab switching: Ctrl+PageDown / Ctrl+PageUp for next/prev tab.
+	if ev.Modifiers()&tcell.ModCtrl != 0 {
+		switch ev.Key() {
+		case tcell.KeyPgDn:
+			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "tab.next"})
+			return
+		case tcell.KeyPgUp:
+			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "tab.prev"})
+			return
 		}
 	}
 

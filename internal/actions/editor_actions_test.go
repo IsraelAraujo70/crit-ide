@@ -26,20 +26,43 @@ type mockApp struct {
 	inputMode     InputMode
 	contextMenu   *editor.MenuState
 	pendingAction string
+	buffers       []*editor.Buffer
+	activeIdx     int
+	treeVisible   bool
+	focus         FocusArea
 }
 
-func (m *mockApp) ActiveBuffer() *editor.Buffer         { return m.buffer }
-func (m *mockApp) ScrollY() int                         { return m.scrollY }
-func (m *mockApp) SetScrollY(y int)                     { m.scrollY = y }
-func (m *mockApp) ViewportHeight() int                  { return m.vpHeight }
-func (m *mockApp) ScreenWidth() int                     { return m.scrWidth }
-func (m *mockApp) Quit()                                { m.didQuit = true }
-func (m *mockApp) Clipboard() ClipboardProvider         { return m.clipboard }
-func (m *mockApp) InputMode() InputMode                 { return m.inputMode }
-func (m *mockApp) SetInputMode(mode InputMode)          { m.inputMode = mode }
-func (m *mockApp) ContextMenu() *editor.MenuState       { return m.contextMenu }
+func (m *mockApp) ActiveBuffer() *editor.Buffer          { return m.buffer }
+func (m *mockApp) ScrollY() int                          { return m.scrollY }
+func (m *mockApp) SetScrollY(y int)                      { m.scrollY = y }
+func (m *mockApp) ViewportHeight() int                   { return m.vpHeight }
+func (m *mockApp) ScreenWidth() int                      { return m.scrWidth }
+func (m *mockApp) Quit()                                 { m.didQuit = true }
+func (m *mockApp) Clipboard() ClipboardProvider          { return m.clipboard }
+func (m *mockApp) InputMode() InputMode                  { return m.inputMode }
+func (m *mockApp) SetInputMode(mode InputMode)           { m.inputMode = mode }
+func (m *mockApp) ContextMenu() *editor.MenuState        { return m.contextMenu }
 func (m *mockApp) SetContextMenu(menu *editor.MenuState) { m.contextMenu = menu }
-func (m *mockApp) PostAction(actionID string)           { m.pendingAction = actionID }
+func (m *mockApp) PostAction(actionID string)            { m.pendingAction = actionID }
+
+// Tab / multi-buffer stubs.
+func (m *mockApp) Buffers() []*editor.Buffer    { return m.buffers }
+func (m *mockApp) ActiveBufferIndex() int        { return m.activeIdx }
+func (m *mockApp) OpenFile(path string) error    { return nil }
+func (m *mockApp) CloseBuffer(idx int)           {}
+func (m *mockApp) SwitchBuffer(idx int)          { m.activeIdx = idx }
+
+// File tree stubs.
+func (m *mockApp) FileTree() FileTreeState       { return nil }
+func (m *mockApp) FileTreeVisible() bool         { return m.treeVisible }
+func (m *mockApp) SetFileTreeVisible(v bool)     { m.treeVisible = v }
+func (m *mockApp) ToggleFileTree()               { m.treeVisible = !m.treeVisible }
+func (m *mockApp) FileTreeWidth() int            { return 30 }
+func (m *mockApp) TreeViewportHeight() int       { return m.vpHeight - 3 }
+
+// Focus area stubs.
+func (m *mockApp) FocusArea() FocusArea          { return m.focus }
+func (m *mockApp) SetFocusArea(area FocusArea)   { m.focus = area }
 
 func newTestContext(app *mockApp, actionID string, payload any) *ActionContext {
 	return &ActionContext{

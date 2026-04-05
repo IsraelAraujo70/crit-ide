@@ -15,10 +15,31 @@ const (
 	ModeContextMenu                  // Context menu is open.
 )
 
+// FocusArea indicates which panel currently has keyboard focus.
+type FocusArea int
+
+const (
+	FocusEditor   FocusArea = iota // Editor pane has focus.
+	FocusFileTree                  // File tree panel has focus.
+)
+
 // ClipboardProvider abstracts clipboard read/write for actions.
 type ClipboardProvider interface {
 	Read() (string, error)
 	Write(text string) error
+}
+
+// FileTreeState is the interface actions use to interact with the file tree.
+// It avoids importing the filetree package directly from actions.
+type FileTreeState interface {
+	MoveUp()
+	MoveDown()
+	Toggle() string // Returns file path if a file was selected, "" otherwise.
+	Expand()
+	Collapse()
+	Refresh()
+	SetCursorToScreenRow(row int)
+	EnsureCursorVisible(viewportHeight int)
 }
 
 // AppState is the interface that actions use to interact with the application.
@@ -42,6 +63,25 @@ type AppState interface {
 
 	// Pending action trampoline for menu execution.
 	PostAction(actionID string)
+
+	// Tab / multi-buffer management.
+	Buffers() []*editor.Buffer
+	ActiveBufferIndex() int
+	OpenFile(path string) error
+	CloseBuffer(idx int)
+	SwitchBuffer(idx int)
+
+	// File tree.
+	FileTree() FileTreeState
+	FileTreeVisible() bool
+	SetFileTreeVisible(v bool)
+	ToggleFileTree()
+	FileTreeWidth() int
+	TreeViewportHeight() int
+
+	// Focus area.
+	FocusArea() FocusArea
+	SetFocusArea(area FocusArea)
 }
 
 // ActionContext carries everything an action needs to execute.

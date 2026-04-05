@@ -5,18 +5,26 @@ import (
 	"github.com/israelcorrea/crit-ide/internal/events"
 )
 
+// tabBarHeight is the number of rows occupied by the tab bar.
+const tabBarHeight = 1
+
 // screenToBufferPos converts screen coordinates to a buffer position.
 // Returns the buffer row and byte-offset column, and whether the position
-// is valid (i.e., not on gutter or statusline).
+// is valid (i.e., not on gutter, statusline, or tab bar).
 func screenToBufferPos(buf *editor.Buffer, scrollY, vpHeight, screenX, screenY int) (row, col int, ok bool) {
-	if screenY >= vpHeight {
+	// Adjust for tab bar.
+	editorScreenY := screenY - tabBarHeight
+	if editorScreenY < 0 {
+		return 0, 0, false // Tab bar area.
+	}
+	if editorScreenY >= vpHeight {
 		return 0, 0, false // Statusline.
 	}
 	gutterWidth := editor.GutterWidth(buf.Text.LineCount())
 	if screenX < gutterWidth {
 		return 0, 0, false // Gutter.
 	}
-	bufferRow := scrollY + screenY
+	bufferRow := scrollY + editorScreenY
 	maxRow := buf.Text.LineCount() - 1
 	if maxRow < 0 {
 		maxRow = 0
