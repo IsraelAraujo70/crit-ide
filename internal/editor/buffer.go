@@ -40,6 +40,7 @@ type Buffer struct {
 	CursorRow  int
 	CursorCol  int
 	desiredCol int // Sticky column for Up/Down movement (byte offset).
+	LanguageID string // Language identifier for highlighting and LSP (e.g., "go", "python").
 }
 
 // NewBuffer creates a new empty scratch buffer.

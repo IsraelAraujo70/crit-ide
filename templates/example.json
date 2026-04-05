@@ -1,0 +1,38 @@
+{
+  "name": "crit-ide",
+  "version": "0.1.0",
+  "description": "A terminal IDE written in Go",
+  "author": {
+    "name": "Israel",
+    "email": "israel@example.com",
+    "url": null
+  },
+  "config": {
+    "theme": "default-dark",
+    "tabSize": 4,
+    "insertSpaces": false,
+    "wordWrap": true,
+    "fontSize": 14,
+    "lineNumbers": true
+  },
+  "languages": [
+    { "id": "go", "extensions": [".go"], "server": "gopls" },
+    { "id": "python", "extensions": [".py"], "server": "pylsp" },
+    { "id": "rust", "extensions": [".rs"], "server": "rust-analyzer" }
+  ],
+  "keybindings": {
+    "save": "Ctrl+S",
+    "quit": "Ctrl+Q",
+    "definition": "F12",
+    "hover": "Ctrl+K",
+    "format": "Ctrl+L"
+  },
+  "features": {
+    "syntaxHighlighting": true,
+    "lsp": true,
+    "git": false,
+    "ai": false
+  },
+  "maxRecentFiles": 25,
+  "debug": false
+}

@@ -15,11 +15,14 @@ type mockApp struct {
 	didQuit  bool
 }
 
-func (m *mockApp) ActiveBuffer() *editor.Buffer { return m.buffer }
-func (m *mockApp) ScrollY() int                 { return m.scrollY }
-func (m *mockApp) SetScrollY(y int)             { m.scrollY = y }
-func (m *mockApp) ViewportHeight() int           { return m.vpHeight }
-func (m *mockApp) Quit()                         { m.didQuit = true }
+func (m *mockApp) ActiveBuffer() *editor.Buffer            { return m.buffer }
+func (m *mockApp) ScrollY() int                            { return m.scrollY }
+func (m *mockApp) SetScrollY(y int)                        { m.scrollY = y }
+func (m *mockApp) ViewportHeight() int                     { return m.vpHeight }
+func (m *mockApp) Quit()                                   { m.didQuit = true }
+func (m *mockApp) LSPServer(_ string) any                  { return nil }
+func (m *mockApp) SetStatusMessage(_ string)               {}
+func (m *mockApp) NavigateToPosition(_ string, _, _ int)   {}
 
 func newTestContext(app *mockApp, actionID string, payload any) *ActionContext {
 	return &ActionContext{

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crit-IDE Demo</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Main navigation -->
+    <nav class="navbar" id="main-nav">
+        <a href="/" class="logo">Crit-IDE</a>
+        <ul class="nav-links">
+            <li><a href="#features">Features</a></li>
+            <li><a href="#download">Download</a></li>
+            <li><a href="#docs">Docs</a></li>
+        </ul>
+    </nav>
+
+    <main>
+        <section id="hero">
+            <h1>A Terminal IDE That Thinks</h1>
+            <p>Built with Go. Powered by LSP. Colored by regex.</p>
+            <button onclick="getStarted()" class="btn-primary">
+                Get Started &rarr;
+            </button>
+        </section>
+
+        <section id="features">
+            <h2>Features</h2>
+            <div class="grid">
+                <article class="card" data-feature="highlight">
+                    <h3>Syntax Highlighting</h3>
+                    <p>12 languages supported out of the box.</p>
+                </article>
+                <article class="card" data-feature="lsp">
+                    <h3>LSP Integration</h3>
+                    <p>Diagnostics, hover, go-to-definition &amp; formatting.</p>
+                </article>
+            </div>
+        </section>
+
+        <footer>
+            <p>&copy; 2026 Crit-IDE. MIT License.</p>
+        </footer>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>

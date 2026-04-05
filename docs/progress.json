@@ -120,7 +120,7 @@
       "status": "planned",
       "summary": "Syntax highlighting, file tree, project-wide search",
       "deliverables": [
-        { "item": "Syntax highlighting (regex-based V1, Tree-sitter V2)", "status": "planned" },
+        { "item": "Syntax highlighting (regex-based V1, Tree-sitter V2)", "status": "done" },
         { "item": "File explorer / tree panel", "status": "planned" },
         { "item": "Project-wide search with results navigation", "status": "planned" },
         { "item": "Undo/redo", "status": "planned" }
@@ -132,10 +132,11 @@
       "status": "planned",
       "summary": "Language Server Protocol integration",
       "deliverables": [
-        { "item": "LSP client (stdio JSON-RPC)", "status": "planned" },
-        { "item": "Diagnostics (inline + panel)", "status": "planned" },
-        { "item": "Go to definition", "status": "planned" },
-        { "item": "Hover information", "status": "planned" },
+        { "item": "LSP client (stdio JSON-RPC)", "status": "done" },
+        { "item": "Diagnostics (inline + panel)", "status": "done" },
+        { "item": "Go to definition", "status": "done" },
+        { "item": "Hover information", "status": "done" },
+        { "item": "Document formatting", "status": "done" },
         { "item": "Rename symbol", "status": "planned" },
         { "item": "Completion popup (LSP source)", "status": "planned" }
       ]

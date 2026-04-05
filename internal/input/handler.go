@@ -47,7 +47,23 @@ func (h *Handler) handleKey(ev *tcell.EventKey) {
 		case tcell.KeyCtrlQ:
 			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "app.quit"})
 			return
+		case tcell.KeyCtrlK:
+			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "lsp.hover"})
+			return
+		case tcell.KeyCtrlG:
+			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "lsp.definition"})
+			return
+		case tcell.KeyCtrlL:
+			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "lsp.format"})
+			return
 		}
+	}
+
+	// Function keys.
+	switch ev.Key() {
+	case tcell.KeyF12:
+		h.bus.Send(events.Event{Type: events.EventAction, ActionID: "lsp.definition"})
+		return
 	}
 
 	// Special keys.

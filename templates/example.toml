@@ -1,0 +1,77 @@
+# Crit-IDE Configuration File
+# Place at ~/.config/crit-ide/config.toml
+
+[editor]
+tab_size = 4
+insert_spaces = false
+word_wrap = true
+line_numbers = true
+cursor_blink = true
+auto_save_delay = 5000  # milliseconds
+
+[editor.cursor]
+style = "block"    # block, line, underline
+blink_rate = 500
+
+[theme]
+name = "catppuccin-mocha"
+font_family = "JetBrains Mono"
+font_size = 14
+
+[theme.colors]
+background = "#1e1e2e"
+foreground = "#cdd6f4"
+cursor = "#f5e0dc"
+selection = "#45475a"
+
+[keybindings]
+"ctrl+s" = "file.save"
+"ctrl+q" = "app.quit"
+"f12"    = "lsp.definition"
+"ctrl+k" = "lsp.hover"
+"ctrl+l" = "lsp.format"
+
+# LSP server configurations
+[[lsp.servers]]
+language = "go"
+command = "gopls"
+args = []
+root_markers = ["go.mod", "go.sum"]
+
+[[lsp.servers]]
+language = "python"
+command = "pylsp"
+args = []
+root_markers = ["pyproject.toml", "setup.py"]
+
+[[lsp.servers]]
+language = "rust"
+command = "rust-analyzer"
+args = []
+root_markers = ["Cargo.toml"]
+
+[[lsp.servers]]
+language = "typescript"
+command = "typescript-language-server"
+args = ["--stdio"]
+root_markers = ["tsconfig.json", "package.json"]
+
+# File associations
+[files]
+associations = { "Makefile" = "shell", "Dockerfile" = "shell" }
+exclude = ["node_modules", ".git", "target", "vendor"]
+
+[files.auto_detect]
+enabled = true
+max_line_scan = 10  # lines to scan for shebang detection
+
+# Feature flags
+[features]
+syntax_highlighting = true
+lsp = true
+git_integration = false
+ai_completion = false
+terminal_pane = false
+
+# Dates for reference
+created_at = 2026-04-05T12:00:00Z
