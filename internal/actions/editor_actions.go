@@ -234,4 +234,20 @@ func RegisterAll(r *Registry) {
 	r.Register(&tabPrev{})
 	r.Register(&tabClose{})
 	r.Register(&tabClick{})
+
+	// Tree file operations.
+	r.Register(&treeNew{})
+	r.Register(&treeRename{})
+	r.Register(&treeDelete{})
+
+	// Prompt input.
+	r.Register(&promptChar{})
+	r.Register(&promptBackspace{})
+	r.Register(&promptDelete{})
+	r.Register(&promptLeft{})
+	r.Register(&promptRight{})
+	r.Register(&promptHome{})
+	r.Register(&promptEnd{})
+	r.Register(&promptCancel{})
+	r.Register(&promptConfirm{})
 }

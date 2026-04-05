@@ -45,6 +45,9 @@ type ViewState struct {
 	TreeCursor    int        // Cursor index in TreeNodes.
 	TreeScrollY   int        // Scroll offset for tree.
 	TreeFocused   bool       // Whether the tree panel has focus.
+
+	// Input prompt.
+	Prompt        *editor.PromptState // Non-nil when prompt is active.
 }
 
 // Renderer draws the editor state to a tcell screen.
@@ -173,17 +176,29 @@ func (r *Renderer) Render(vs *ViewState) {
 		r.drawFileTree(vs, editorWidth, treeWidth, tabBarHeight, editorHeight)
 	}
 
-	// --- Draw statusline ---
+	// --- Draw statusline or prompt ---
 	statuslineRow := tabBarHeight + editorHeight
-	r.drawStatusline(vs, statuslineRow, gutterWidth)
+	if vs.Prompt != nil {
+		r.drawPrompt(vs.Prompt, statuslineRow, vs.Width)
+	} else {
+		r.drawStatusline(vs, statuslineRow, gutterWidth)
+	}
 
 	// --- Position the terminal cursor ---
-	cursorScreenRow := vs.Buffer.CursorRow - vs.ScrollY + tabBarHeight
-	cursorScreenCol := r.screenCol(vs.Buffer, gutterWidth)
-	if !vs.TreeFocused && cursorScreenRow >= tabBarHeight && cursorScreenRow < tabBarHeight+editorHeight {
-		r.screen.ShowCursor(cursorScreenCol, cursorScreenRow)
+	if vs.Prompt != nil {
+		// Show cursor inside the prompt input.
+		promptCursorX := len(vs.Prompt.Label) + vs.Prompt.CursorPos
+		if promptCursorX < vs.Width {
+			r.screen.ShowCursor(promptCursorX, statuslineRow)
+		}
 	} else {
-		r.screen.HideCursor()
+		cursorScreenRow := vs.Buffer.CursorRow - vs.ScrollY + tabBarHeight
+		cursorScreenCol := r.screenCol(vs.Buffer, gutterWidth)
+		if !vs.TreeFocused && cursorScreenRow >= tabBarHeight && cursorScreenRow < tabBarHeight+editorHeight {
+			r.screen.ShowCursor(cursorScreenCol, cursorScreenRow)
+		} else {
+			r.screen.HideCursor()
+		}
 	}
 
 	// --- Draw popup menu on top if active ---
@@ -382,6 +397,41 @@ func (r *Renderer) drawStatusline(vs *ViewState, y int, gutterWidth int) {
 	// Right: cursor position.
 	right := fmt.Sprintf("Ln %d, Col %d ", vs.Buffer.CursorRow+1, vs.Buffer.CursorCol+1)
 	r.drawString(vs.Width-len(right), y, right, statusStyle)
+}
+
+// drawPrompt renders the input prompt bar (replaces statusline when active).
+func (r *Renderer) drawPrompt(p *editor.PromptState, y, width int) {
+	labelStyle := tcell.StyleDefault.
+		Foreground(tcell.NewRGBColor(100, 180, 255)).
+		Background(tcell.NewRGBColor(25, 25, 40)).
+		Bold(true)
+	inputStyle := tcell.StyleDefault.
+		Foreground(tcell.ColorWhite).
+		Background(tcell.NewRGBColor(25, 25, 40))
+
+	// Clear the row.
+	for x := 0; x < width; x++ {
+		r.screen.SetContent(x, y, ' ', nil, inputStyle)
+	}
+
+	// Draw label.
+	x := 0
+	for _, ch := range p.Label {
+		if x >= width {
+			break
+		}
+		r.screen.SetContent(x, y, ch, nil, labelStyle)
+		x++
+	}
+
+	// Draw input text.
+	for _, ch := range p.Input {
+		if x >= width {
+			break
+		}
+		r.screen.SetContent(x, y, ch, nil, inputStyle)
+		x++
+	}
 }
 
 // screenCol calculates the screen X position of the cursor, accounting for

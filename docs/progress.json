@@ -63,7 +63,12 @@
         { "item": "Ctrl+B to toggle tree visibility", "status": "done" },
         { "item": "Mouse scroll in tree panel", "status": "done" },
         { "item": "Focus routing between editor and tree", "status": "done" },
-        { "item": "Tree refresh preserving expanded state", "status": "done" }
+        { "item": "Tree refresh preserving expanded state", "status": "done" },
+        { "item": "Create file/directory from tree (a key, end with / for dir)", "status": "done" },
+        { "item": "Rename file/directory from tree (r key)", "status": "done" },
+        { "item": "Delete file/directory from tree (d key, with confirmation)", "status": "done" },
+        { "item": "Input prompt system (ModePrompt) with cursor, backspace, navigation", "status": "done" },
+        { "item": "Nested path creation (pkg/models/user.go creates intermediate dirs)", "status": "done" }
       ]
     },
     {
@@ -164,7 +169,11 @@
     "menu.open", "menu.close", "menu.up", "menu.down", "menu.execute", "menu.click",
     "tree.toggle", "tree.up", "tree.down", "tree.enter", "tree.expand", "tree.collapse",
     "tree.click", "tree.focus.editor", "tree.refresh",
-    "tab.next", "tab.prev", "tab.close", "tab.click"
+    "tree.new", "tree.rename", "tree.delete",
+    "tab.next", "tab.prev", "tab.close", "tab.click",
+    "prompt.char", "prompt.backspace", "prompt.delete",
+    "prompt.left", "prompt.right", "prompt.home", "prompt.end",
+    "prompt.cancel", "prompt.confirm"
   ],
   "keybindings": {
     "Arrow Up/Down/Left/Right": "cursor movement (or tree nav when tree focused)",
@@ -181,7 +190,11 @@
     "Ctrl+W": "tab.close",
     "Ctrl+PageDown": "tab.next",
     "Ctrl+PageUp": "tab.prev",
-    "Escape": "input.escape (or tree.focus.editor when tree focused)",
+    "a (tree focused)": "tree.new — create file/dir",
+    "r (tree focused)": "tree.rename — rename at cursor",
+    "d (tree focused)": "tree.delete — delete at cursor",
+    "Backspace/Delete (tree focused)": "tree.delete",
+    "Escape": "input.escape / tree.focus.editor / prompt.cancel",
     "Left click": "mouse.click / tab.click / tree.click (auto-routed by position)",
     "Left drag": "mouse.drag",
     "Right click": "menu.open",

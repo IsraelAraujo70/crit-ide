@@ -30,6 +30,7 @@ type mockApp struct {
 	activeIdx     int
 	treeVisible   bool
 	focus         FocusArea
+	prompt        *editor.PromptState
 }
 
 func (m *mockApp) ActiveBuffer() *editor.Buffer          { return m.buffer }
@@ -63,6 +64,10 @@ func (m *mockApp) TreeViewportHeight() int       { return m.vpHeight - 3 }
 // Focus area stubs.
 func (m *mockApp) FocusArea() FocusArea          { return m.focus }
 func (m *mockApp) SetFocusArea(area FocusArea)   { m.focus = area }
+
+// Prompt stubs.
+func (m *mockApp) Prompt() *editor.PromptState         { return m.prompt }
+func (m *mockApp) SetPrompt(p *editor.PromptState)     { m.prompt = p }
 
 func newTestContext(app *mockApp, actionID string, payload any) *ActionContext {
 	return &ActionContext{

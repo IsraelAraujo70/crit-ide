@@ -44,6 +44,9 @@ type App struct {
 
 	// Focus.
 	focusArea actions.FocusArea
+
+	// Input prompt.
+	prompt *editor.PromptState
 }
 
 // New creates a new App. If filePath is non-empty, that file will be opened.
@@ -125,6 +128,8 @@ func (a *App) Run() error {
 				a.handleNormalAction(ev.ActionID, ctx)
 			case actions.ModeContextMenu:
 				a.handleContextMenuAction(ev.ActionID, ctx)
+			case actions.ModePrompt:
+				a.handlePromptAction(ev.ActionID, ctx)
 			}
 
 			// Execute any pending action (from menu item execution).
@@ -211,17 +216,37 @@ func (a *App) handleNormalAction(actionID string, ctx *actions.ActionContext) {
 	// When file tree has focus, remap cursor keys to tree navigation.
 	if a.focusArea == actions.FocusFileTree {
 		remap := map[string]string{
-			"cursor.up":      "tree.up",
-			"cursor.down":    "tree.down",
-			"cursor.right":   "tree.expand",
-			"cursor.left":    "tree.collapse",
-			"insert.newline": "tree.enter",
-			"input.escape":   "tree.focus.editor",
+			"cursor.up":       "tree.up",
+			"cursor.down":     "tree.down",
+			"cursor.right":    "tree.expand",
+			"cursor.left":     "tree.collapse",
+			"insert.newline":  "tree.enter",
+			"input.escape":    "tree.focus.editor",
+			"delete.backward": "tree.delete",
+			"delete.forward":  "tree.delete",
 		}
 		if mapped, ok := remap[actionID]; ok {
 			_ = a.registry.Execute(mapped, ctx)
 			return
 		}
+
+		// Shortcut keys when tree is focused: a=new, d=delete, r=rename.
+		if actionID == "insert.char" {
+			if ch, ok := ctx.Event.Payload.(rune); ok {
+				switch ch {
+				case 'a':
+					_ = a.registry.Execute("tree.new", ctx)
+					return
+				case 'd':
+					_ = a.registry.Execute("tree.delete", ctx)
+					return
+				case 'r':
+					_ = a.registry.Execute("tree.rename", ctx)
+					return
+				}
+			}
+		}
+
 		// Ignore other actions when tree is focused.
 		return
 	}
@@ -330,6 +355,9 @@ func (a *App) render() {
 	if a.contextMenu != nil {
 		vs.Popup = a.contextMenu
 	}
+	if a.prompt != nil {
+		vs.Prompt = a.prompt
+	}
 
 	// Build tab info.
 	for i, b := range a.buffers {
@@ -405,6 +433,26 @@ func (a *App) handleContextMenuAction(actionID string, ctx *actions.ActionContex
 	default:
 		// Ignore all other actions while menu is open.
 	}
+}
+
+// handlePromptAction routes actions while the input prompt is active.
+func (a *App) handlePromptAction(actionID string, ctx *actions.ActionContext) {
+	remap := map[string]string{
+		"insert.char":     "prompt.char",
+		"delete.backward": "prompt.backspace",
+		"delete.forward":  "prompt.delete",
+		"cursor.left":     "prompt.left",
+		"cursor.right":    "prompt.right",
+		"cursor.home":     "prompt.home",
+		"cursor.end":      "prompt.end",
+		"input.escape":    "prompt.cancel",
+		"insert.newline":  "prompt.confirm",
+	}
+	if mapped, ok := remap[actionID]; ok {
+		_ = a.registry.Execute(mapped, ctx)
+		return
+	}
+	// Ignore all other actions while prompt is open.
 }
 
 // scrollY returns the scroll offset for the active buffer.
@@ -614,4 +662,16 @@ func (a *App) FocusArea() actions.FocusArea {
 // SetFocusArea sets the current focus area.
 func (a *App) SetFocusArea(area actions.FocusArea) {
 	a.focusArea = area
+}
+
+// --- Input prompt interface ---
+
+// Prompt returns the active prompt state, or nil.
+func (a *App) Prompt() *editor.PromptState {
+	return a.prompt
+}
+
+// SetPrompt sets or clears the prompt state.
+func (a *App) SetPrompt(p *editor.PromptState) {
+	a.prompt = p
 }

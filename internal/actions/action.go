@@ -13,6 +13,7 @@ type InputMode int
 const (
 	ModeNormal      InputMode = iota // Normal editing mode.
 	ModeContextMenu                  // Context menu is open.
+	ModePrompt                       // Input prompt is active.
 )
 
 // FocusArea indicates which panel currently has keyboard focus.
@@ -40,6 +41,14 @@ type FileTreeState interface {
 	Refresh()
 	SetCursorToScreenRow(row int)
 	EnsureCursorVisible(viewportHeight int)
+
+	// File operations.
+	CreateFile(name string) (string, error)
+	Rename(newName string) (string, error)
+	Delete() error
+	CursorNodeName() string
+	CursorNodePath() string
+	CursorIsRoot() bool
 }
 
 // AppState is the interface that actions use to interact with the application.
@@ -82,6 +91,10 @@ type AppState interface {
 	// Focus area.
 	FocusArea() FocusArea
 	SetFocusArea(area FocusArea)
+
+	// Input prompt.
+	Prompt() *editor.PromptState
+	SetPrompt(p *editor.PromptState)
 }
 
 // ActionContext carries everything an action needs to execute.
