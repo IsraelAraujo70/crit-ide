@@ -64,7 +64,9 @@
         "file.save",
         "app.quit",
         "scroll.up",
-        "scroll.down"
+        "scroll.down",
+        "mouse.click",
+        "mouse.scroll"
       ],
       "keybindings": {
         "Arrow Up": "cursor.up",
@@ -94,9 +96,9 @@
         { "item": "EditorView decoupled from Buffer (multiple views per buffer)", "status": "planned" },
         { "item": "LayoutTree with horizontal/vertical splits", "status": "planned" },
         { "item": "Split resize via keyboard", "status": "planned" },
-        { "item": "Mouse click to position cursor", "status": "planned" },
+        { "item": "Mouse click to position cursor", "status": "done" },
         { "item": "Mouse click to focus pane", "status": "planned" },
-        { "item": "Mouse scroll for viewport", "status": "planned" },
+        { "item": "Mouse scroll for viewport", "status": "done" },
         { "item": "Enhanced statusline with per-pane info", "status": "planned" }
       ]
     },

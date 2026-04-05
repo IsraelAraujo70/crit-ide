@@ -170,20 +170,33 @@ func (a *scrollDown) Run(ctx *ActionContext) error {
 	return nil
 }
 
-// RegisterAll registers all Sprint 1 actions in the given registry.
+// RegisterAll registers all actions in the given registry.
 func RegisterAll(r *Registry) {
+	// Cursor movement.
 	r.Register(&cursorUp{})
 	r.Register(&cursorDown{})
 	r.Register(&cursorLeft{})
 	r.Register(&cursorRight{})
 	r.Register(&cursorHome{})
 	r.Register(&cursorEnd{})
+
+	// Text editing.
 	r.Register(&insertChar{})
 	r.Register(&insertNewline{})
 	r.Register(&deleteBackward{})
 	r.Register(&deleteForward{})
+
+	// File operations.
 	r.Register(&fileSave{})
+
+	// Application.
 	r.Register(&appQuit{})
+
+	// Keyboard scroll.
 	r.Register(&scrollUp{})
 	r.Register(&scrollDown{})
+
+	// Mouse (Sprint 2).
+	r.Register(&mouseClick{})
+	r.Register(&mouseScroll{})
 }

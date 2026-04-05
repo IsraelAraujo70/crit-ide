@@ -274,6 +274,54 @@ func (b *Buffer) ClampCursor() {
 	}
 }
 
+// SetCursorPos moves the cursor to the given row and byte-offset column,
+// clamping to valid bounds. It also updates the sticky desiredCol.
+func (b *Buffer) SetCursorPos(row, col int) {
+	b.CursorRow = row
+	b.CursorCol = col
+	b.ClampCursor()
+	b.desiredCol = b.CursorCol
+}
+
+// GutterWidth calculates the number of columns needed for line numbers.
+// The formula is: max(3, digits(lineCount)) + 1 (for the space separator).
+func GutterWidth(lineCount int) int {
+	digits := 1
+	n := lineCount
+	for n >= 10 {
+		digits++
+		n /= 10
+	}
+	if digits < 3 {
+		digits = 3
+	}
+	return digits + 1
+}
+
+// VisualColToByteOffset converts a visual column (accounting for tab expansion
+// with 4-space tab stops) to a byte offset within the given line string.
+// If visualCol falls beyond the end of the line, it returns len(line).
+// If visualCol lands in the middle of a tab expansion, it snaps to the
+// byte offset of that tab character.
+func VisualColToByteOffset(line string, visualCol int) int {
+	vcol := 0
+	for i, ch := range line {
+		if vcol >= visualCol {
+			return i
+		}
+		if ch == '\t' {
+			tabWidth := 4 - (vcol % 4)
+			if vcol+tabWidth > visualCol {
+				return i // Click lands inside tab expansion — snap to the tab.
+			}
+			vcol += tabWidth
+		} else {
+			vcol++
+		}
+	}
+	return len(line)
+}
+
 // FileName returns the base name of the file, or "[scratch]" for scratch buffers.
 func (b *Buffer) FileName() string {
 	if b.Path == "" {

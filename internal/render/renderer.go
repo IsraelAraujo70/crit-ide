@@ -140,18 +140,9 @@ func (r *Renderer) screenCol(buf *editor.Buffer, gutterWidth int) int {
 	return gutterWidth + col
 }
 
-// gutterWidth calculates how many columns the line number gutter needs.
+// gutterWidth delegates to editor.GutterWidth for a single source of truth.
 func (r *Renderer) gutterWidth(lineCount int) int {
-	digits := 1
-	n := lineCount
-	for n >= 10 {
-		digits++
-		n /= 10
-	}
-	if digits < 3 {
-		digits = 3 // Minimum gutter width.
-	}
-	return digits + 1 // +1 for the space separator.
+	return editor.GutterWidth(lineCount)
 }
 
 // drawString draws a string at the given position with the given style.

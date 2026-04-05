@@ -11,16 +11,18 @@ The input package handles raw terminal events and translates them into action ev
 ## How It Works
 
 ```
-tcell.PollEvent() → Handler.handleKey() → bus.Send(Event{ActionID: "..."})
+tcell.PollEvent() → Handler.handleKey()   → bus.Send(Event{ActionID: "..."})
+                  → Handler.handleMouse() → bus.Send(Event{ActionID: "...", Payload: ...})
 ```
 
-The `Handler` sits in a tight loop calling `screen.PollEvent()`. When a key event arrives, it translates it to an action ID using the keymap and sends it to the event bus. The main loop consumes these events and executes the corresponding actions.
+The `Handler` sits in a tight loop calling `screen.PollEvent()`. When an event arrives, it routes by type: key events go to the keymap translator, mouse events go to the mouse handler, and resize events are forwarded directly. The main loop consumes these events and executes the corresponding actions.
 
 ### Event Types Handled
 
 | tcell Event | Translation |
 |-------------|------------|
 | `EventKey` | Translated to an action via the keymap |
+| `EventMouse` | Translated to `mouse.click` or `mouse.scroll` actions with screen coordinates |
 | `EventResize` | Sent as `EventResize` (triggers screen sync + re-render) |
 | `nil` | Goroutine exits (screen was finalized) |
 
@@ -54,6 +56,28 @@ The keymap is hardcoded in `handleKey()` for Sprint 1. Sprint 3 will extract thi
 - Falls back to default bindings
 
 The current structure already separates "what key was pressed" from "what action to run", making the extraction straightforward.
+
+### Mouse Handling (Sprint 2)
+
+Mouse events (`tcell.EventMouse`) are handled by `handleMouse()`. The handler converts tcell mouse events into actions:
+
+| Mouse Event | Action ID | Payload |
+|-------------|-----------|---------|
+| Left click (`Button1`) | `mouse.click` | `MouseClickPayload{ScreenX, ScreenY}` |
+| Wheel up (`WheelUp`) | `mouse.scroll` | `MouseScrollPayload{Direction: -3}` |
+| Wheel down (`WheelDown`) | `mouse.scroll` | `MouseScrollPayload{Direction: 3}` |
+| Other (right click, drag, motion) | Ignored | — |
+
+The handler sends raw screen coordinates. Coordinate conversion (screen → buffer position) is done in the action itself, keeping the input handler free of editor/render dependencies.
+
+The `mouse.click` action:
+1. Ignores clicks on the statusline (screenY >= viewportHeight)
+2. Ignores clicks on the gutter (screenX < gutterWidth)
+3. Converts screen position to buffer row/col using `editor.GutterWidth()` and `editor.VisualColToByteOffset()`
+4. Handles tabs (snap to tab byte offset) and UTF-8 correctly
+5. Clamps to document bounds (past EOF → last line, past line end → end of line)
+
+The `mouse.scroll` action scrolls the viewport by 3 lines per wheel event and adjusts the cursor if it scrolls out of view.
 
 ### Ctrl Key Handling
 

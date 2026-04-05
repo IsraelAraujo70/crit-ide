@@ -41,3 +41,16 @@ func (b *Bus) Send(e Event) {
 func (b *Bus) Recv() <-chan Event {
 	return b.ch
 }
+
+// MouseClickPayload carries raw screen coordinates from a mouse click event.
+type MouseClickPayload struct {
+	ScreenX int
+	ScreenY int
+}
+
+// MouseScrollPayload carries scroll direction and screen position.
+type MouseScrollPayload struct {
+	Direction int // Negative = up, positive = down (number of lines).
+	ScreenX   int // Reserved for future multi-pane scroll targeting.
+	ScreenY   int // Reserved for future multi-pane scroll targeting.
+}

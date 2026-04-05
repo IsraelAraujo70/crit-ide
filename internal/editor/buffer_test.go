@@ -392,3 +392,139 @@ func TestBuffer_DeleteForward_AtEnd(t *testing.T) {
 		t.Fatalf("expected %q, got %q", "a", b.Text.Line(0))
 	}
 }
+
+// --- SetCursorPos tests ---
+
+func TestBuffer_SetCursorPos_Normal(t *testing.T) {
+	b := NewBuffer("t")
+	for _, ch := range "hello" {
+		b.InsertChar(ch)
+	}
+	b.InsertNewline()
+	for _, ch := range "world" {
+		b.InsertChar(ch)
+	}
+
+	b.SetCursorPos(0, 2)
+	if b.CursorRow != 0 || b.CursorCol != 2 {
+		t.Fatalf("expected (0,2), got (%d,%d)", b.CursorRow, b.CursorCol)
+	}
+
+	// Verify sticky column is updated: moving down and back up should return to col 2.
+	b.MoveCursor(DirDown)
+	b.MoveCursor(DirUp)
+	if b.CursorCol != 2 {
+		t.Fatalf("sticky col: expected 2, got %d", b.CursorCol)
+	}
+}
+
+func TestBuffer_SetCursorPos_BeyondEnd(t *testing.T) {
+	b := NewBuffer("t")
+	for _, ch := range "hi" {
+		b.InsertChar(ch)
+	}
+
+	b.SetCursorPos(0, 100)
+	if b.CursorCol != 2 {
+		t.Fatalf("expected col clamped to 2, got %d", b.CursorCol)
+	}
+}
+
+func TestBuffer_SetCursorPos_BeyondEOF(t *testing.T) {
+	b := NewBuffer("t")
+	b.InsertChar('a')
+	b.InsertNewline()
+	b.InsertChar('b')
+
+	b.SetCursorPos(999, 0)
+	if b.CursorRow != 1 {
+		t.Fatalf("expected row clamped to 1, got %d", b.CursorRow)
+	}
+}
+
+func TestBuffer_SetCursorPos_Negative(t *testing.T) {
+	b := NewBuffer("t")
+	b.InsertChar('a')
+
+	b.SetCursorPos(-1, -1)
+	if b.CursorRow != 0 || b.CursorCol != 0 {
+		t.Fatalf("expected (0,0), got (%d,%d)", b.CursorRow, b.CursorCol)
+	}
+}
+
+// --- GutterWidth tests ---
+
+func TestGutterWidth(t *testing.T) {
+	tests := []struct {
+		lineCount int
+		want      int
+	}{
+		{0, 4},     // edge case: no lines → min 3 + 1
+		{1, 4},     // min 3 digits + 1 space
+		{9, 4},     // 1 digit → min 3 + 1
+		{10, 4},    // 2 digits → min 3 + 1
+		{99, 4},    // 2 digits → min 3 + 1
+		{100, 4},   // 3 digits → 3 + 1
+		{999, 4},   // 3 digits → 3 + 1
+		{1000, 5},  // 4 digits → 4 + 1
+		{10000, 6}, // 5 digits → 5 + 1
+	}
+
+	for _, tt := range tests {
+		got := GutterWidth(tt.lineCount)
+		if got != tt.want {
+			t.Errorf("GutterWidth(%d) = %d, want %d", tt.lineCount, got, tt.want)
+		}
+	}
+}
+
+// --- VisualColToByteOffset tests ---
+
+func TestVisualColToByteOffset(t *testing.T) {
+	tests := []struct {
+		name      string
+		line      string
+		visualCol int
+		want      int
+	}{
+		// ASCII
+		{"ascii simple", "hello", 2, 2},
+		{"ascii start", "hello", 0, 0},
+		{"ascii end", "hello", 5, 5},
+
+		// Beyond line end
+		{"beyond end", "abc", 10, 3},
+
+		// Empty line
+		{"empty line", "", 5, 0},
+
+		// Tabs
+		{"tab at start, col 0", "\thello", 0, 0},
+		{"tab at start, mid-tab", "\thello", 3, 0},
+		{"tab at start, after tab", "\thello", 4, 1},
+		{"tab at start, first char after tab", "\thello", 5, 2},
+		{"tab in middle, on tab", "ab\tcd", 2, 2},
+		{"tab in middle, mid-tab", "ab\tcd", 3, 2},
+		{"tab in middle, after tab", "ab\tcd", 4, 3},
+		{"tab in middle, second char after", "ab\tcd", 5, 4},
+		{"two tabs, on second tab", "\t\t", 4, 1},
+		{"two tabs, after both", "\t\t", 8, 2},
+
+		// UTF-8 multibyte
+		{"utf8 before multibyte", "a\u00f1b", 0, 0},
+		{"utf8 on multibyte", "a\u00f1b", 1, 1},
+		{"utf8 after multibyte", "a\u00f1b", 2, 3}, // ñ is 2 bytes, so 'b' starts at byte 3
+		{"utf8 3-byte", "a\u4e2db", 1, 1},
+		{"utf8 3-byte after", "a\u4e2db", 2, 4}, // 中 is 3 bytes, so 'b' starts at byte 4
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := VisualColToByteOffset(tt.line, tt.visualCol)
+			if got != tt.want {
+				t.Errorf("VisualColToByteOffset(%q, %d) = %d, want %d",
+					tt.line, tt.visualCol, got, tt.want)
+			}
+		})
+	}
+}
