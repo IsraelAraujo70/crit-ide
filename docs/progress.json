@@ -66,7 +66,19 @@
         "scroll.up",
         "scroll.down",
         "mouse.click",
-        "mouse.scroll"
+        "mouse.scroll",
+        "mouse.drag",
+        "select.all",
+        "input.escape",
+        "clipboard.copy",
+        "clipboard.cut",
+        "clipboard.paste",
+        "menu.open",
+        "menu.close",
+        "menu.up",
+        "menu.down",
+        "menu.execute",
+        "menu.click"
       ],
       "keybindings": {
         "Arrow Up": "cursor.up",
@@ -83,7 +95,17 @@
         "Ctrl+Q": "app.quit",
         "PageUp": "scroll.up",
         "PageDown": "scroll.down",
-        "Any printable key": "insert.char"
+        "Any printable key": "insert.char",
+        "Ctrl+C": "clipboard.copy",
+        "Ctrl+X": "clipboard.cut",
+        "Ctrl+V": "clipboard.paste",
+        "Ctrl+A": "select.all",
+        "Escape": "input.escape",
+        "Left click": "mouse.click",
+        "Left drag": "mouse.drag",
+        "Right click": "menu.open",
+        "Wheel Up": "mouse.scroll (-3)",
+        "Wheel Down": "mouse.scroll (+3)"
       }
     },
     {
@@ -99,6 +121,10 @@
         { "item": "Mouse click to position cursor", "status": "done" },
         { "item": "Mouse click to focus pane", "status": "planned" },
         { "item": "Mouse scroll for viewport", "status": "done" },
+        { "item": "Mouse drag to select text", "status": "done" },
+        { "item": "Right-click context menu (Copy/Cut/Paste/Select All)", "status": "done" },
+        { "item": "Clipboard support (Ctrl+C/X/V)", "status": "done" },
+        { "item": "Select All (Ctrl+A)", "status": "done" },
         { "item": "Enhanced statusline with per-pane info", "status": "planned" }
       ]
     },

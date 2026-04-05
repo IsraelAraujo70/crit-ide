@@ -10,6 +10,10 @@ import (
 type Handler struct {
 	screen tcell.Screen
 	bus    *events.Bus
+	// Drag tracking state.
+	btn1Down bool // Is Button1 currently held?
+	anchorX  int  // Screen X where Button1 was first pressed.
+	anchorY  int  // Screen Y where Button1 was first pressed.
 }
 
 // NewHandler creates a new input handler.
@@ -38,11 +42,12 @@ func (h *Handler) Run() {
 }
 
 // handleMouse translates a tcell mouse event into action events.
-// Sprint 2: left click and wheel scroll. Other buttons and drag are ignored.
+// Supports: left click, drag selection, right click, and wheel scroll.
 func (h *Handler) handleMouse(ev *tcell.EventMouse) {
 	x, y := ev.Position()
 	btn := ev.Buttons()
 
+	// Handle wheel events first (they can coexist with button state).
 	switch {
 	case btn&tcell.WheelUp != 0:
 		h.bus.Send(events.Event{
@@ -50,18 +55,62 @@ func (h *Handler) handleMouse(ev *tcell.EventMouse) {
 			ActionID: "mouse.scroll",
 			Payload:  events.MouseScrollPayload{Direction: -3, ScreenX: x, ScreenY: y},
 		})
+		return
 	case btn&tcell.WheelDown != 0:
 		h.bus.Send(events.Event{
 			Type:     events.EventAction,
 			ActionID: "mouse.scroll",
 			Payload:  events.MouseScrollPayload{Direction: 3, ScreenX: x, ScreenY: y},
 		})
-	case btn&tcell.Button1 != 0:
+		return
+	}
+
+	// Right click (Button3 in standard xterm protocol).
+	if btn&tcell.Button3 != 0 {
 		h.bus.Send(events.Event{
 			Type:     events.EventAction,
-			ActionID: "mouse.click",
+			ActionID: "menu.open",
 			Payload:  events.MouseClickPayload{ScreenX: x, ScreenY: y},
 		})
+		return
+	}
+
+	// Left button drag tracking.
+	if btn&tcell.Button1 != 0 {
+		if !h.btn1Down {
+			// Button just pressed — record anchor.
+			h.btn1Down = true
+			h.anchorX = x
+			h.anchorY = y
+			// Don't send click yet; wait for release to distinguish click vs drag.
+		} else if x != h.anchorX || y != h.anchorY {
+			// Button held and position changed — this is a drag.
+			h.bus.Send(events.Event{
+				Type:     events.EventAction,
+				ActionID: "mouse.drag",
+				Payload: events.MouseDragPayload{
+					AnchorX:  h.anchorX,
+					AnchorY:  h.anchorY,
+					CurrentX: x,
+					CurrentY: y,
+				},
+			})
+		}
+		return
+	}
+
+	// Button released (ButtonNone).
+	if h.btn1Down {
+		h.btn1Down = false
+		if x == h.anchorX && y == h.anchorY {
+			// Released at same position as press — this is a click.
+			h.bus.Send(events.Event{
+				Type:     events.EventAction,
+				ActionID: "mouse.click",
+				Payload:  events.MouseClickPayload{ScreenX: x, ScreenY: y},
+			})
+		}
+		// If position differs, the drag events already handled it.
 	}
 }
 
@@ -76,6 +125,18 @@ func (h *Handler) handleKey(ev *tcell.EventKey) {
 			return
 		case tcell.KeyCtrlQ:
 			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "app.quit"})
+			return
+		case tcell.KeyCtrlC:
+			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "clipboard.copy"})
+			return
+		case tcell.KeyCtrlX:
+			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "clipboard.cut"})
+			return
+		case tcell.KeyCtrlV:
+			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "clipboard.paste"})
+			return
+		case tcell.KeyCtrlA:
+			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "select.all"})
 			return
 		}
 	}
@@ -104,6 +165,8 @@ func (h *Handler) handleKey(ev *tcell.EventKey) {
 		h.bus.Send(events.Event{Type: events.EventAction, ActionID: "delete.backward"})
 	case tcell.KeyDelete:
 		h.bus.Send(events.Event{Type: events.EventAction, ActionID: "delete.forward"})
+	case tcell.KeyEscape:
+		h.bus.Send(events.Event{Type: events.EventAction, ActionID: "input.escape"})
 	case tcell.KeyTab:
 		h.bus.Send(events.Event{Type: events.EventAction, ActionID: "insert.char", Payload: '\t'})
 	case tcell.KeyRune:

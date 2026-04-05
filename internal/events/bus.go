@@ -54,3 +54,11 @@ type MouseScrollPayload struct {
 	ScreenX   int // Reserved for future multi-pane scroll targeting.
 	ScreenY   int // Reserved for future multi-pane scroll targeting.
 }
+
+// MouseDragPayload carries anchor (drag start) and current positions.
+type MouseDragPayload struct {
+	AnchorX  int
+	AnchorY  int
+	CurrentX int
+	CurrentY int
+}

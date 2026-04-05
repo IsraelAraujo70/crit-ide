@@ -7,19 +7,39 @@ import (
 	"github.com/israelcorrea/crit-ide/internal/events"
 )
 
-// mockApp implements AppState for testing.
-type mockApp struct {
-	buffer   *editor.Buffer
-	scrollY  int
-	vpHeight int
-	didQuit  bool
+// mockClipboard implements ClipboardProvider for testing.
+type mockClipboard struct {
+	content string
 }
 
-func (m *mockApp) ActiveBuffer() *editor.Buffer { return m.buffer }
-func (m *mockApp) ScrollY() int                 { return m.scrollY }
-func (m *mockApp) SetScrollY(y int)             { m.scrollY = y }
-func (m *mockApp) ViewportHeight() int           { return m.vpHeight }
-func (m *mockApp) Quit()                         { m.didQuit = true }
+func (c *mockClipboard) Read() (string, error)  { return c.content, nil }
+func (c *mockClipboard) Write(text string) error { c.content = text; return nil }
+
+// mockApp implements AppState for testing.
+type mockApp struct {
+	buffer        *editor.Buffer
+	scrollY       int
+	vpHeight      int
+	scrWidth      int
+	didQuit       bool
+	clipboard     *mockClipboard
+	inputMode     InputMode
+	contextMenu   *editor.MenuState
+	pendingAction string
+}
+
+func (m *mockApp) ActiveBuffer() *editor.Buffer         { return m.buffer }
+func (m *mockApp) ScrollY() int                         { return m.scrollY }
+func (m *mockApp) SetScrollY(y int)                     { m.scrollY = y }
+func (m *mockApp) ViewportHeight() int                  { return m.vpHeight }
+func (m *mockApp) ScreenWidth() int                     { return m.scrWidth }
+func (m *mockApp) Quit()                                { m.didQuit = true }
+func (m *mockApp) Clipboard() ClipboardProvider         { return m.clipboard }
+func (m *mockApp) InputMode() InputMode                 { return m.inputMode }
+func (m *mockApp) SetInputMode(mode InputMode)          { m.inputMode = mode }
+func (m *mockApp) ContextMenu() *editor.MenuState       { return m.contextMenu }
+func (m *mockApp) SetContextMenu(menu *editor.MenuState) { m.contextMenu = menu }
+func (m *mockApp) PostAction(actionID string)           { m.pendingAction = actionID }
 
 func newTestContext(app *mockApp, actionID string, payload any) *ActionContext {
 	return &ActionContext{

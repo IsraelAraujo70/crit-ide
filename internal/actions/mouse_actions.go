@@ -1,13 +1,13 @@
 package actions
 
 import (
-	"github.com/israelcorrea/crit-ide/internal/editor"
 	"github.com/israelcorrea/crit-ide/internal/events"
 )
 
 // --- Mouse click action ---
 
-// mouseClick positions the cursor at the screen location of a mouse click.
+// mouseClick positions the cursor at the screen location of a mouse click
+// and clears any active selection.
 type mouseClick struct{}
 
 func (a *mouseClick) ID() string { return "mouse.click" }
@@ -22,39 +22,13 @@ func (a *mouseClick) Run(ctx *ActionContext) error {
 	scrollY := ctx.App.ScrollY()
 	vpHeight := ctx.App.ViewportHeight()
 
-	screenX := payload.ScreenX
-	screenY := payload.ScreenY
-
-	// Ignore clicks on the statusline (last row).
-	if screenY >= vpHeight {
+	row, col, valid := screenToBufferPos(buf, scrollY, vpHeight, payload.ScreenX, payload.ScreenY)
+	if !valid {
 		return nil
 	}
 
-	gutterWidth := editor.GutterWidth(buf.Text.LineCount())
-
-	// Ignore clicks on the gutter.
-	if screenX < gutterWidth {
-		return nil
-	}
-
-	// Convert screen Y to buffer row.
-	bufferRow := scrollY + screenY
-
-	// Clamp to last line if clicking below EOF.
-	maxRow := buf.Text.LineCount() - 1
-	if maxRow < 0 {
-		maxRow = 0
-	}
-	if bufferRow > maxRow {
-		bufferRow = maxRow
-	}
-
-	// Convert screen X to visual column, then to byte offset.
-	visualCol := screenX - gutterWidth
-	line := buf.Text.Line(bufferRow)
-	byteOffset := editor.VisualColToByteOffset(line, visualCol)
-
-	buf.SetCursorPos(bufferRow, byteOffset)
+	buf.ClearSelection()
+	buf.SetCursorPos(row, col)
 	return nil
 }
 

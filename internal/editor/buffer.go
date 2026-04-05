@@ -39,7 +39,8 @@ type Buffer struct {
 	ReadOnly   bool
 	CursorRow  int
 	CursorCol  int
-	desiredCol int // Sticky column for Up/Down movement (byte offset).
+	Selection  *Selection // Active text selection, nil when no selection.
+	desiredCol int        // Sticky column for Up/Down movement (byte offset).
 }
 
 // NewBuffer creates a new empty scratch buffer.
@@ -93,9 +94,14 @@ func (b *Buffer) SaveFile() error {
 }
 
 // InsertChar inserts a single character at the cursor position.
+// If text is selected, it replaces the selection.
 // CursorCol advances by the UTF-8 byte length of the rune.
 func (b *Buffer) InsertChar(ch rune) {
 	if b.ReadOnly {
+		return
+	}
+	if b.HasSelection() {
+		b.ReplaceSelection(string(ch))
 		return
 	}
 	s := string(ch)
@@ -109,8 +115,13 @@ func (b *Buffer) InsertChar(ch rune) {
 }
 
 // InsertNewline splits the current line at the cursor position.
+// If text is selected, it replaces the selection.
 func (b *Buffer) InsertNewline() {
 	if b.ReadOnly {
+		return
+	}
+	if b.HasSelection() {
+		b.ReplaceSelection("\n")
 		return
 	}
 	err := b.Text.Insert(Position{b.CursorRow, b.CursorCol}, "\n")
@@ -124,8 +135,13 @@ func (b *Buffer) InsertNewline() {
 }
 
 // DeleteBackward removes the character before the cursor (backspace).
+// If text is selected, it deletes the selection instead.
 func (b *Buffer) DeleteBackward() {
 	if b.ReadOnly {
+		return
+	}
+	if b.HasSelection() {
+		b.DeleteSelection()
 		return
 	}
 	if b.CursorCol > 0 {
@@ -163,8 +179,13 @@ func (b *Buffer) DeleteBackward() {
 }
 
 // DeleteForward removes the character at the cursor position (delete key).
+// If text is selected, it deletes the selection instead.
 func (b *Buffer) DeleteForward() {
 	if b.ReadOnly {
+		return
+	}
+	if b.HasSelection() {
+		b.DeleteSelection()
 		return
 	}
 	line := b.Text.Line(b.CursorRow)
@@ -272,6 +293,75 @@ func (b *Buffer) ClampCursor() {
 	if b.CursorCol > lineLen {
 		b.CursorCol = lineLen
 	}
+}
+
+// SetSelection creates or updates the text selection.
+func (b *Buffer) SetSelection(anchor, cursor Position) {
+	b.Selection = &Selection{Anchor: anchor, Cursor: cursor}
+}
+
+// ClearSelection removes the active selection.
+func (b *Buffer) ClearSelection() {
+	b.Selection = nil
+}
+
+// HasSelection returns true if there is a non-empty selection.
+func (b *Buffer) HasSelection() bool {
+	return b.Selection != nil && !b.Selection.IsEmpty()
+}
+
+// SelectedText returns the text within the current selection, or "".
+func (b *Buffer) SelectedText() string {
+	if !b.HasSelection() {
+		return ""
+	}
+	return b.Text.Slice(b.Selection.Normalized())
+}
+
+// DeleteSelection deletes the selected text, moves the cursor to the
+// start of the deleted range, clears the selection, and marks dirty.
+func (b *Buffer) DeleteSelection() {
+	if !b.HasSelection() {
+		return
+	}
+	r := b.Selection.Normalized()
+	_ = b.Text.Delete(r)
+	b.CursorRow = r.Start.Line
+	b.CursorCol = r.Start.Col
+	b.desiredCol = b.CursorCol
+	b.ClearSelection()
+	b.ClampCursor()
+	b.Dirty = true
+}
+
+// ReplaceSelection deletes the selection and inserts text at the cursor.
+func (b *Buffer) ReplaceSelection(text string) {
+	b.DeleteSelection()
+	_ = b.Text.Insert(Position{b.CursorRow, b.CursorCol}, text)
+	// Advance cursor past inserted text.
+	for _, ch := range text {
+		if ch == '\n' {
+			b.CursorRow++
+			b.CursorCol = 0
+		} else {
+			b.CursorCol += len(string(ch))
+		}
+	}
+	b.desiredCol = b.CursorCol
+	b.Dirty = true
+}
+
+// SelectAll selects the entire buffer content.
+func (b *Buffer) SelectAll() {
+	lastLine := b.Text.LineCount() - 1
+	if lastLine < 0 {
+		lastLine = 0
+	}
+	lastCol := len(b.Text.Line(lastLine))
+	b.SetSelection(
+		Position{0, 0},
+		Position{lastLine, lastCol},
+	)
 }
 
 // SetCursorPos moves the cursor to the given row and byte-offset column,

@@ -199,4 +199,22 @@ func RegisterAll(r *Registry) {
 	// Mouse (Sprint 2).
 	r.Register(&mouseClick{})
 	r.Register(&mouseScroll{})
+	r.Register(&mouseDrag{})
+
+	// Selection.
+	r.Register(&selectAll{})
+	r.Register(&inputEscape{})
+
+	// Clipboard.
+	r.Register(&clipboardCopy{})
+	r.Register(&clipboardCut{})
+	r.Register(&clipboardPaste{})
+
+	// Context menu.
+	r.Register(&menuOpen{})
+	r.Register(&menuClose{})
+	r.Register(&menuUp{})
+	r.Register(&menuDown{})
+	r.Register(&menuExecute{})
+	r.Register(&menuClick{})
 }

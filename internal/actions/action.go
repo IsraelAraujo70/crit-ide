@@ -7,6 +7,20 @@ import (
 	"github.com/israelcorrea/crit-ide/internal/events"
 )
 
+// InputMode represents the current input routing mode.
+type InputMode int
+
+const (
+	ModeNormal      InputMode = iota // Normal editing mode.
+	ModeContextMenu                  // Context menu is open.
+)
+
+// ClipboardProvider abstracts clipboard read/write for actions.
+type ClipboardProvider interface {
+	Read() (string, error)
+	Write(text string) error
+}
+
 // AppState is the interface that actions use to interact with the application.
 // It breaks the circular dependency: actions don't import app, app implements this.
 type AppState interface {
@@ -14,7 +28,20 @@ type AppState interface {
 	ScrollY() int
 	SetScrollY(y int)
 	ViewportHeight() int
+	ScreenWidth() int
 	Quit()
+
+	// Clipboard access.
+	Clipboard() ClipboardProvider
+
+	// Input mode and context menu.
+	InputMode() InputMode
+	SetInputMode(mode InputMode)
+	ContextMenu() *editor.MenuState
+	SetContextMenu(menu *editor.MenuState)
+
+	// Pending action trampoline for menu execution.
+	PostAction(actionID string)
 }
 
 // ActionContext carries everything an action needs to execute.
