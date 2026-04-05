@@ -65,8 +65,8 @@ func (h *Handler) handleMouse(ev *tcell.EventMouse) {
 		return
 	}
 
-	// Right click (Button3 in standard xterm protocol).
-	if btn&tcell.Button3 != 0 {
+	// Right click (Button2 = secondary button in tcell).
+	if btn&tcell.Button2 != 0 {
 		h.bus.Send(events.Event{
 			Type:     events.EventAction,
 			ActionID: "menu.open",
