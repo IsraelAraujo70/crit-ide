@@ -1,0 +1,80 @@
+# Docker Compose configuration for development
+version: "3.8"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        GO_VERSION: "1.24"
+    image: crit-ide:dev
+    container_name: crit-ide-dev
+    ports:
+      - "8080:8080"
+      - "2345:2345"  # Debugger port
+    environment:
+      - APP_ENV=development
+      - LOG_LEVEL=debug
+      - DATABASE_URL=postgres://user:pass@db:5432/critide
+    volumes:
+      - .:/workspace
+      - go-modules:/go/pkg/mod
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - backend
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+
+  db:
+    image: postgres:16-alpine
+    container_name: critide-db
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
+      POSTGRES_DB: critide
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - backend
+
+  redis:
+    image: redis:7-alpine
+    container_name: critide-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
+    networks:
+      - backend
+
+volumes:
+  db-data:
+    driver: local
+  go-modules:
+    driver: local
+
+networks:
+  backend:
+    driver: bridge
+
+# Anchors and aliases
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+    tag: "{{.Name}}"

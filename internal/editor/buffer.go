@@ -40,6 +40,7 @@ type Buffer struct {
 	CursorRow  int
 	CursorCol  int
 	Selection  *Selection // Active text selection, nil when no selection.
+	LanguageID string     // Language identifier for syntax highlighting and LSP.
 	desiredCol int        // Sticky column for Up/Down movement (byte offset).
 }
 

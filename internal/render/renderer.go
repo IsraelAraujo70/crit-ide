@@ -7,6 +7,8 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/israelcorrea/crit-ide/internal/editor"
+	"github.com/israelcorrea/crit-ide/internal/highlight"
+	"github.com/israelcorrea/crit-ide/internal/theme"
 )
 
 // TabInfo holds the display information for a single tab.
@@ -23,6 +25,14 @@ type TreeNode struct {
 	Expanded bool
 	Depth    int
 	Path     string
+}
+
+// DiagnosticRange represents a diagnostic marker on a specific line.
+type DiagnosticRange struct {
+	Line     int // Zero-based line index.
+	StartCol int // Start byte offset within line.
+	EndCol   int // End byte offset within line.
+	Severity int // 1=Error, 2=Warning, 3=Info, 4=Hint.
 }
 
 // ViewState contains everything the renderer needs to draw a frame.
@@ -48,6 +58,16 @@ type ViewState struct {
 
 	// Input prompt.
 	Prompt        *editor.PromptState // Non-nil when prompt is active.
+
+	// Syntax highlighting.
+	Highlighter  highlight.Highlighter
+	Theme        *theme.Theme
+
+	// LSP diagnostics.
+	Diagnostics  []DiagnosticRange
+	StatusMsg    string // Optional message to show in statusline.
+	DiagErrors   int    // Error count for statusline.
+	DiagWarnings int    // Warning count for statusline.
 }
 
 // Renderer draws the editor state to a tcell screen.
@@ -64,6 +84,11 @@ func NewRenderer(screen tcell.Screen) *Renderer {
 // file tree, cursor, and statusline.
 func (r *Renderer) Render(vs *ViewState) {
 	r.screen.Clear()
+
+	th := vs.Theme
+	if th == nil {
+		th = theme.DefaultTheme()
+	}
 
 	tabBarHeight := 1 // Always show tab bar.
 	statuslineHeight := 1
@@ -117,10 +142,8 @@ func (r *Renderer) Render(vs *ViewState) {
 		textWidth = 1
 	}
 
-	defaultStyle := tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorDefault)
+	defaultStyle := th.Default
 	selectionStyle := tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(tcell.ColorLightGray)
-	gutterStyle := tcell.StyleDefault.Foreground(tcell.ColorGray).Background(tcell.ColorDefault)
-	cursorLineGutterStyle := tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorDefault)
 
 	// Precompute selection range for efficient per-character checks.
 	var selStart, selEnd editor.Position
@@ -131,20 +154,23 @@ func (r *Renderer) Render(vs *ViewState) {
 		selEnd = selRange.End
 	}
 
+	// Build a quick-lookup map for diagnostics on visible lines.
+	diagMap := r.buildDiagMap(vs.Diagnostics, vs.ScrollY, vs.ScrollY+editorHeight)
+
 	for row := 0; row < editorHeight; row++ {
 		screenRow := contentStartY + row
 		lineIdx := vs.ScrollY + row
 		if lineIdx >= vs.Buffer.Text.LineCount() {
 			// Draw tilde for lines beyond the document.
-			r.drawString(0, screenRow, "~", gutterStyle)
+			r.drawString(0, screenRow, "~", th.Gutter)
 			continue
 		}
 
 		// Draw gutter (line number).
 		lineNum := fmt.Sprintf("%*d ", gutterWidth-1, lineIdx+1)
-		gs := gutterStyle
+		gs := th.Gutter
 		if lineIdx == vs.Buffer.CursorRow {
-			gs = cursorLineGutterStyle
+			gs = th.GutterActive
 		}
 		r.drawString(0, screenRow, lineNum, gs)
 
@@ -167,15 +193,55 @@ func (r *Renderer) Render(vs *ViewState) {
 			}
 		}
 
-		// Draw line content.
+		// Get highlight tokens for this line.
 		line := vs.Buffer.Text.Line(lineIdx)
+		var tokens []highlight.Token
+		if vs.Highlighter != nil {
+			tokens = vs.Highlighter.HighlightLine(lineIdx, line)
+		}
+
+		// Get diagnostics for this line.
+		lineDiags := diagMap[lineIdx]
+
+		// Draw line content with highlighting, selection, and diagnostics.
 		col := 0
-		for i, ch := range line {
+		tokenIdx := 0
+		byteOff := 0
+		for _, ch := range line {
 			if col >= textWidth {
 				break
 			}
+
+			runeLen := len(string(ch))
+
+			// Determine style from highlight tokens.
 			style := defaultStyle
-			if lineSelStart >= 0 && i >= lineSelStart && i < lineSelEnd {
+			for tokenIdx < len(tokens) && tokens[tokenIdx].End <= byteOff {
+				tokenIdx++
+			}
+			if tokenIdx < len(tokens) && tokens[tokenIdx].Start <= byteOff && byteOff < tokens[tokenIdx].End {
+				style = th.StyleFor(tokens[tokenIdx].Type)
+			}
+
+			// Apply diagnostic underline if applicable.
+			for _, d := range lineDiags {
+				if byteOff >= d.StartCol && byteOff < d.EndCol {
+					switch d.Severity {
+					case 1:
+						style = style.Underline(true).Foreground(tcell.ColorRed)
+					case 2:
+						style = style.Underline(true).Foreground(tcell.ColorYellow)
+					case 3:
+						style = style.Underline(true).Foreground(tcell.ColorBlue)
+					default:
+						style = style.Underline(true)
+					}
+					break
+				}
+			}
+
+			// Selection overrides everything.
+			if lineSelStart >= 0 && byteOff >= lineSelStart && byteOff < lineSelEnd {
 				style = selectionStyle
 			}
 
@@ -189,6 +255,8 @@ func (r *Renderer) Render(vs *ViewState) {
 				r.screen.SetContent(gutterWidth+col, screenRow, ch, nil, style)
 				col++
 			}
+
+			byteOff += runeLen
 		}
 	}
 
@@ -206,7 +274,7 @@ func (r *Renderer) Render(vs *ViewState) {
 	if vs.Prompt != nil {
 		r.drawPrompt(vs.Prompt, statuslineRow, vs.Width)
 	} else {
-		r.drawStatusline(vs, statuslineRow, gutterWidth)
+		r.drawStatusline(vs, statuslineRow, gutterWidth, th)
 	}
 
 	// --- Position the terminal cursor ---
@@ -415,9 +483,15 @@ func (r *Renderer) drawFileTree(vs *ViewState, startX, treeWidth, startY, height
 }
 
 // drawStatusline renders the bottom status bar.
-func (r *Renderer) drawStatusline(vs *ViewState, y int, gutterWidth int) {
+func (r *Renderer) drawStatusline(vs *ViewState, y int, gutterWidth int, th *theme.Theme) {
 	statusStyle := tcell.StyleDefault.
 		Foreground(tcell.NewRGBColor(200, 200, 200)).
+		Background(tcell.NewRGBColor(30, 30, 50))
+	errorStyle := tcell.StyleDefault.
+		Foreground(tcell.ColorRed).
+		Background(tcell.NewRGBColor(30, 30, 50))
+	warningStyle := tcell.StyleDefault.
+		Foreground(tcell.ColorYellow).
 		Background(tcell.NewRGBColor(30, 30, 50))
 
 	// Clear the statusline.
@@ -425,17 +499,38 @@ func (r *Renderer) drawStatusline(vs *ViewState, y int, gutterWidth int) {
 		r.screen.SetContent(x, y, ' ', nil, statusStyle)
 	}
 
-	// Left: file name + dirty flag.
+	// Left: file name + dirty flag + language.
 	name := vs.Buffer.FileName()
 	dirty := ""
 	if vs.Buffer.Dirty {
 		dirty = " [+]"
 	}
-	left := fmt.Sprintf(" %s%s", name, dirty)
+	langInfo := ""
+	if vs.Buffer.LanguageID != "" {
+		langInfo = " [" + vs.Buffer.LanguageID + "]"
+	}
+	left := fmt.Sprintf(" %s%s%s", name, dirty, langInfo)
 	r.drawString(0, y, left, statusStyle)
 
-	// Right: cursor position.
-	right := fmt.Sprintf("Ln %d, Col %d ", vs.Buffer.CursorRow+1, vs.Buffer.CursorCol+1)
+	// Diagnostic counts after filename.
+	diagX := len(left) + 2
+	if vs.DiagErrors > 0 {
+		errStr := fmt.Sprintf("E:%d", vs.DiagErrors)
+		r.drawString(diagX, y, errStr, errorStyle)
+		diagX += len(errStr) + 1
+	}
+	if vs.DiagWarnings > 0 {
+		warnStr := fmt.Sprintf("W:%d", vs.DiagWarnings)
+		r.drawString(diagX, y, warnStr, warningStyle)
+	}
+
+	// Right: status message or cursor position.
+	var right string
+	if vs.StatusMsg != "" {
+		right = vs.StatusMsg + " "
+	} else {
+		right = fmt.Sprintf("Ln %d, Col %d ", vs.Buffer.CursorRow+1, vs.Buffer.CursorCol+1)
+	}
 	r.drawString(vs.Width-len(right), y, right, statusStyle)
 }
 
@@ -582,4 +677,18 @@ func (r *Renderer) drawString(x, y int, s string, style tcell.Style) {
 		r.screen.SetContent(x, y, ch, nil, style)
 		x++
 	}
+}
+
+// buildDiagMap groups diagnostics by line for quick lookup.
+func (r *Renderer) buildDiagMap(diags []DiagnosticRange, minLine, maxLine int) map[int][]DiagnosticRange {
+	if len(diags) == 0 {
+		return nil
+	}
+	m := make(map[int][]DiagnosticRange)
+	for _, d := range diags {
+		if d.Line >= minLine && d.Line < maxLine {
+			m[d.Line] = append(m[d.Line], d)
+		}
+	}
+	return m
 }

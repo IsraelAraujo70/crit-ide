@@ -69,6 +69,11 @@ func (m *mockApp) SetFocusArea(area FocusArea)   { m.focus = area }
 func (m *mockApp) Prompt() *editor.PromptState         { return m.prompt }
 func (m *mockApp) SetPrompt(p *editor.PromptState)     { m.prompt = p }
 
+// LSP stubs.
+func (m *mockApp) LSPServer(langID string) any                   { return nil }
+func (m *mockApp) SetStatusMessage(msg string)                   {}
+func (m *mockApp) NavigateToPosition(path string, line, col int) {}
+
 func newTestContext(app *mockApp, actionID string, payload any) *ActionContext {
 	return &ActionContext{
 		App: app,

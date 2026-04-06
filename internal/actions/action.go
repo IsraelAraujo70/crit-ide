@@ -95,6 +95,11 @@ type AppState interface {
 	// Input prompt.
 	Prompt() *editor.PromptState
 	SetPrompt(p *editor.PromptState)
+
+	// LSP support.
+	LSPServer(langID string) any                      // Returns *lsp.Server or nil (typed as any to avoid import cycle).
+	SetStatusMessage(msg string)                      // Show temporary message in statusline.
+	NavigateToPosition(path string, line, col int)    // Jump to position (same file) or show path (different file).
 }
 
 // ActionContext carries everything an action needs to execute.

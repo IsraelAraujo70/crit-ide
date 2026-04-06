@@ -12,8 +12,11 @@ import (
 	"github.com/israelcorrea/crit-ide/internal/editor"
 	"github.com/israelcorrea/crit-ide/internal/events"
 	"github.com/israelcorrea/crit-ide/internal/filetree"
+	"github.com/israelcorrea/crit-ide/internal/highlight"
 	"github.com/israelcorrea/crit-ide/internal/input"
+	"github.com/israelcorrea/crit-ide/internal/lsp"
 	"github.com/israelcorrea/crit-ide/internal/render"
+	"github.com/israelcorrea/crit-ide/internal/theme"
 )
 
 const defaultTreeWidth = 30
@@ -47,16 +50,32 @@ type App struct {
 
 	// Input prompt.
 	prompt *editor.PromptState
+
+	// Syntax highlighting.
+	highlighter *highlight.RegexHighlighter
+	langReg     *highlight.LangRegistry
+	theme       *theme.Theme
+
+	// LSP.
+	lspManager  *lsp.Manager
+	diagStore   *lsp.DiagnosticsStore
+	lastContent map[editor.BufferID]string // Tracks buffer content for change detection.
+	statusMsg   string                     // Temporary status message.
 }
 
 // New creates a new App. If filePath is non-empty, that file will be opened.
 func New(filePath string) *App {
 	return &App{
-		filePath:  filePath,
-		bus:       events.NewBus(256),
-		registry:  actions.NewRegistry(),
-		scrollYs:  make(map[editor.BufferID]int),
-		treeWidth: defaultTreeWidth,
+		filePath:    filePath,
+		bus:         events.NewBus(256),
+		registry:    actions.NewRegistry(),
+		scrollYs:    make(map[editor.BufferID]int),
+		treeWidth:   defaultTreeWidth,
+		highlighter: highlight.NewRegexHighlighter(),
+		langReg:     highlight.DefaultRegistry(),
+		theme:       theme.DefaultTheme(),
+		diagStore:   lsp.NewDiagnosticsStore(),
+		lastContent: make(map[editor.BufferID]string),
 	}
 }
 
@@ -88,6 +107,7 @@ func (a *App) Run() error {
 
 	// Register all actions.
 	actions.RegisterAll(a.registry)
+	actions.RegisterLSPActions(a.registry)
 
 	// Load file or create scratch buffer.
 	if a.filePath != "" {
@@ -102,8 +122,20 @@ func (a *App) Run() error {
 		a.buffers = append(a.buffers, editor.NewBuffer("scratch"))
 	}
 
+	// Detect language and configure highlighter for initial buffer.
+	a.detectLanguage(a.ActiveBuffer())
+
 	// Initialize file tree from current working directory or file's directory.
 	a.initFileTree()
+
+	// Initialize LSP manager.
+	rootPath := a.projectRoot()
+	a.lspManager = lsp.NewManager(a.bus, rootPath)
+	defer a.lspManager.StopAll()
+
+	// Start LSP server for initial buffer.
+	a.startLSPForBuffer(a.ActiveBuffer())
+	a.lastContent[a.ActiveBuffer().ID] = a.ActiveBuffer().Text.Content()
 
 	// Launch input goroutine.
 	inputHandler := input.NewHandler(a.screen, a.bus)
@@ -144,6 +176,17 @@ func (a *App) Run() error {
 			}
 
 			a.ensureCursorVisible()
+			a.notifyLSPIfChanged()
+
+			// Invalidate highlighter when buffer changes.
+			if a.ActiveBuffer().Dirty {
+				a.highlighter.InvalidateFrom(a.ActiveBuffer().CursorRow)
+			}
+
+			// If save action, notify LSP.
+			if ev.ActionID == "file.save" {
+				a.notifyLSPSave()
+			}
 
 		case events.EventResize:
 			a.screen.Sync()
@@ -152,6 +195,29 @@ func (a *App) Run() error {
 		case events.EventQuit:
 			a.quit = true
 			continue
+
+		case events.EventLSPDiagnostics:
+			if p, ok := ev.Payload.(*lsp.DiagnosticsPayload); ok {
+				a.diagStore.Update(p.URI, p.Diagnostics)
+			}
+
+		case events.EventLSPDefinition:
+			if p, ok := ev.Payload.(*lsp.DefinitionPayload); ok {
+				a.handleDefinition(p)
+			}
+
+		case events.EventLSPHover:
+			if p, ok := ev.Payload.(*lsp.HoverPayload); ok {
+				a.handleHover(p)
+			}
+
+		case events.EventLSPFormat:
+			if p, ok := ev.Payload.(*lsp.FormatPayload); ok {
+				a.handleFormat(p)
+			}
+
+		case events.EventLSPServerState:
+			// Server state change — could show in statusline in the future.
 		}
 
 		a.render()
@@ -351,6 +417,9 @@ func (a *App) render() {
 		TreeVisible:  a.treeVisible,
 		TreeWidth:    a.treeWidth,
 		TreeFocused:  a.focusArea == actions.FocusFileTree,
+		Highlighter:  a.highlighter,
+		Theme:        a.theme,
+		StatusMsg:    a.statusMsg,
 	}
 
 	if a.contextMenu != nil {
@@ -384,7 +453,39 @@ func (a *App) render() {
 		}
 	}
 
+	// Build diagnostic ranges for the renderer.
+	if buf.Path != "" {
+		uri := lsp.URIFromPath(buf.Path)
+		diags := a.diagStore.ForURI(uri)
+		for _, d := range diags {
+			startLine := d.Range.Start.Line
+			startContent := ""
+			if startLine < buf.Text.LineCount() {
+				startContent = buf.Text.Line(startLine)
+			}
+			endLine := d.Range.End.Line
+			endContent := ""
+			if endLine < buf.Text.LineCount() {
+				endContent = buf.Text.Line(endLine)
+			}
+
+			_, startCol := lsp.LSPToEditorPosition(d.Range.Start, startContent)
+			_, endCol := lsp.LSPToEditorPosition(d.Range.End, endContent)
+
+			vs.Diagnostics = append(vs.Diagnostics, render.DiagnosticRange{
+				Line:     startLine,
+				StartCol: startCol,
+				EndCol:   endCol,
+				Severity: int(d.Severity),
+			})
+		}
+		vs.DiagErrors, vs.DiagWarnings = a.diagStore.CountsByURI(uri)
+	}
+
 	a.renderer.Render(vs)
+
+	// Clear status message after displaying once.
+	a.statusMsg = ""
 }
 
 // ensureCursorVisible adjusts scrollY so the cursor is within the viewport.
@@ -576,6 +677,14 @@ func (a *App) OpenFile(path string) error {
 
 	a.buffers = append(a.buffers, buf)
 	a.activeIdx = len(a.buffers) - 1
+
+	// Detect language and set up highlighting.
+	a.detectLanguage(buf)
+
+	// Start LSP server and notify didOpen.
+	a.startLSPForBuffer(buf)
+	a.lastContent[buf.ID] = buf.Text.Content()
+
 	return nil
 }
 
@@ -584,6 +693,16 @@ func (a *App) CloseBuffer(idx int) {
 	if idx < 0 || idx >= len(a.buffers) || len(a.buffers) <= 1 {
 		return
 	}
+
+	// Notify LSP server about buffer close.
+	closingBuf := a.buffers[idx]
+	if closingBuf.Path != "" && closingBuf.LanguageID != "" && a.lspManager != nil {
+		if srv := a.lspManager.ServerFor(closingBuf.LanguageID); srv != nil {
+			uri := lsp.URIFromPath(closingBuf.Path)
+			srv.DidClose(uri)
+		}
+	}
+	delete(a.lastContent, closingBuf.ID)
 
 	// Remove scroll state for this buffer.
 	delete(a.scrollYs, a.buffers[idx].ID)
@@ -604,6 +723,16 @@ func (a *App) CloseBuffer(idx int) {
 func (a *App) SwitchBuffer(idx int) {
 	if idx >= 0 && idx < len(a.buffers) {
 		a.activeIdx = idx
+		// Switch highlighter to the new buffer's language.
+		buf := a.buffers[idx]
+		if buf.LanguageID != "" {
+			def := a.langReg.DetectLanguage(buf.Path)
+			if def != nil {
+				a.highlighter.SetLanguageDef(def)
+			}
+		} else {
+			a.highlighter.SetLanguageDef(nil)
+		}
 	}
 }
 
@@ -681,4 +810,178 @@ func (a *App) Prompt() *editor.PromptState {
 // SetPrompt sets or clears the prompt state.
 func (a *App) SetPrompt(p *editor.PromptState) {
 	a.prompt = p
+}
+
+// --- LSP support interface ---
+
+// LSPServer returns the running LSP server for the given language, or nil.
+func (a *App) LSPServer(langID string) any {
+	if a.lspManager == nil {
+		return nil
+	}
+	return a.lspManager.ServerFor(langID)
+}
+
+// SetStatusMessage sets a temporary message to display in the statusline.
+func (a *App) SetStatusMessage(msg string) {
+	a.statusMsg = msg
+}
+
+// NavigateToPosition moves the cursor to the given position.
+func (a *App) NavigateToPosition(path string, line, col int) {
+	buf := a.ActiveBuffer()
+	if path == buf.Path {
+		buf.CursorRow = line
+		buf.CursorCol = col
+		buf.ClampCursor()
+		a.ensureCursorVisible()
+	} else {
+		a.statusMsg = fmt.Sprintf("-> %s:%d", filepath.Base(path), line+1)
+	}
+}
+
+// --- Syntax highlighting helpers ---
+
+// detectLanguage sets the buffer's LanguageID and configures the highlighter.
+func (a *App) detectLanguage(buf *editor.Buffer) {
+	if buf.Path == "" {
+		return
+	}
+	def := a.langReg.DetectLanguage(buf.Path)
+	if def != nil {
+		buf.LanguageID = def.ID
+		a.highlighter.SetLanguageDef(def)
+	}
+}
+
+// --- LSP helpers ---
+
+// projectRoot returns the project root directory.
+func (a *App) projectRoot() string {
+	if a.filePath != "" {
+		absPath, _ := filepath.Abs(a.filePath)
+		return filepath.Dir(absPath)
+	}
+	cwd, _ := os.Getwd()
+	return cwd
+}
+
+// startLSPForBuffer starts an LSP server for the buffer's language.
+func (a *App) startLSPForBuffer(buf *editor.Buffer) {
+	if buf.LanguageID == "" || a.lspManager == nil {
+		return
+	}
+	srv, err := a.lspManager.EnsureServer(buf.LanguageID)
+	if err != nil {
+		return // Server not available — editor works without LSP.
+	}
+	if buf.Path != "" {
+		uri := lsp.URIFromPath(buf.Path)
+		srv.DidOpen(uri, buf.LanguageID, buf.Text.Content())
+	}
+}
+
+// notifyLSPIfChanged sends didChange to the LSP server if buffer content changed.
+func (a *App) notifyLSPIfChanged() {
+	buf := a.ActiveBuffer()
+	if buf.LanguageID == "" || a.lspManager == nil {
+		return
+	}
+	content := buf.Text.Content()
+	if content == a.lastContent[buf.ID] {
+		return
+	}
+	a.lastContent[buf.ID] = content
+
+	srv := a.lspManager.ServerFor(buf.LanguageID)
+	if srv == nil {
+		return
+	}
+	uri := lsp.URIFromPath(buf.Path)
+	srv.DidChange(uri, content)
+}
+
+// notifyLSPSave sends didSave to the LSP server.
+func (a *App) notifyLSPSave() {
+	buf := a.ActiveBuffer()
+	if buf.LanguageID == "" || a.lspManager == nil {
+		return
+	}
+	srv := a.lspManager.ServerFor(buf.LanguageID)
+	if srv == nil {
+		return
+	}
+	uri := lsp.URIFromPath(buf.Path)
+	srv.DidSave(uri)
+}
+
+// handleDefinition processes a go-to-definition response.
+func (a *App) handleDefinition(p *lsp.DefinitionPayload) {
+	if len(p.Locations) == 0 {
+		a.statusMsg = "No definition found"
+		return
+	}
+	loc := p.Locations[0]
+	path, err := lsp.PathFromURI(loc.URI)
+	if err != nil {
+		return
+	}
+	buf := a.ActiveBuffer()
+	if path == buf.Path {
+		lineContent := buf.Text.Line(loc.Range.Start.Line)
+		_, byteCol := lsp.LSPToEditorPosition(loc.Range.Start, lineContent)
+		buf.CursorRow = loc.Range.Start.Line
+		buf.CursorCol = byteCol
+		a.ensureCursorVisible()
+	} else {
+		a.statusMsg = fmt.Sprintf("-> %s:%d", filepath.Base(path), loc.Range.Start.Line+1)
+	}
+}
+
+// handleHover processes a hover response.
+func (a *App) handleHover(p *lsp.HoverPayload) {
+	msg := p.Contents.Value
+	if idx := strings.Index(msg, "\n"); idx >= 0 {
+		msg = msg[:idx]
+	}
+	if len(msg) > 120 {
+		msg = msg[:117] + "..."
+	}
+	a.statusMsg = msg
+}
+
+// handleFormat applies formatting edits from the LSP server.
+func (a *App) handleFormat(p *lsp.FormatPayload) {
+	buf := a.ActiveBuffer()
+	edits := p.Edits
+	for i := len(edits) - 1; i >= 0; i-- {
+		edit := edits[i]
+		startLine := edit.Range.Start.Line
+		startContent := ""
+		if startLine < buf.Text.LineCount() {
+			startContent = buf.Text.Line(startLine)
+		}
+		endLine := edit.Range.End.Line
+		endContent := ""
+		if endLine < buf.Text.LineCount() {
+			endContent = buf.Text.Line(endLine)
+		}
+
+		_, startCol := lsp.LSPToEditorPosition(edit.Range.Start, startContent)
+		_, endCol := lsp.LSPToEditorPosition(edit.Range.End, endContent)
+
+		_ = buf.Text.Delete(editor.Range{
+			Start: editor.Position{Line: startLine, Col: startCol},
+			End:   editor.Position{Line: endLine, Col: endCol},
+		})
+		if edit.NewText != "" {
+			_ = buf.Text.Insert(
+				editor.Position{Line: startLine, Col: startCol},
+				edit.NewText,
+			)
+		}
+	}
+	buf.Dirty = true
+	buf.ClampCursor()
+	a.statusMsg = "Formatted"
 }

@@ -4,9 +4,14 @@ package events
 type EventType int
 
 const (
-	EventAction EventType = iota // An action should be executed.
-	EventQuit                    // The application should terminate.
-	EventResize                  // The terminal was resized.
+	EventAction         EventType = iota // An action should be executed.
+	EventQuit                            // The application should terminate.
+	EventResize                          // The terminal was resized.
+	EventLSPDiagnostics                  // LSP diagnostics received. Payload: *lsp.DiagnosticsPayload.
+	EventLSPDefinition                   // LSP go-to-definition result. Payload: *lsp.DefinitionPayload.
+	EventLSPHover                        // LSP hover result. Payload: *lsp.HoverPayload.
+	EventLSPFormat                       // LSP format result. Payload: *lsp.FormatPayload.
+	EventLSPServerState                  // LSP server state change. Payload: *lsp.ServerStatePayload.
 )
 
 // Event is the message passed through the event bus.

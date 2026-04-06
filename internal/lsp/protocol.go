@@ -1,0 +1,212 @@
+package lsp
+
+import "encoding/json"
+
+// DocumentURI is a file URI (e.g., "file:///path/to/file.go").
+type DocumentURI string
+
+// Position in a text document (LSP uses 0-based line, 0-based UTF-16 character offset).
+type Position struct {
+	Line      int `json:"line"`
+	Character int `json:"character"`
+}
+
+// Range in a text document.
+type Range struct {
+	Start Position `json:"start"`
+	End   Position `json:"end"`
+}
+
+// Location represents a location in a document.
+type Location struct {
+	URI   DocumentURI `json:"uri"`
+	Range Range       `json:"range"`
+}
+
+// TextDocumentIdentifier identifies a text document.
+type TextDocumentIdentifier struct {
+	URI DocumentURI `json:"uri"`
+}
+
+// VersionedTextDocumentIdentifier identifies a specific version of a text document.
+type VersionedTextDocumentIdentifier struct {
+	URI     DocumentURI `json:"uri"`
+	Version int         `json:"version"`
+}
+
+// TextDocumentItem describes a text document.
+type TextDocumentItem struct {
+	URI        DocumentURI `json:"uri"`
+	LanguageID string      `json:"languageId"`
+	Version    int         `json:"version"`
+	Text       string      `json:"text"`
+}
+
+// TextDocumentContentChangeEvent describes a content change.
+type TextDocumentContentChangeEvent struct {
+	Range *Range `json:"range,omitempty"`
+	Text  string `json:"text"`
+}
+
+// TextDocumentPositionParams is used for hover, definition, etc.
+type TextDocumentPositionParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Position     Position               `json:"position"`
+}
+
+// DiagnosticSeverity indicates the severity of a diagnostic.
+type DiagnosticSeverity int
+
+const (
+	SeverityError   DiagnosticSeverity = 1
+	SeverityWarning DiagnosticSeverity = 2
+	SeverityInfo    DiagnosticSeverity = 3
+	SeverityHint    DiagnosticSeverity = 4
+)
+
+// Diagnostic represents a diagnostic message.
+type Diagnostic struct {
+	Range    Range              `json:"range"`
+	Severity DiagnosticSeverity `json:"severity,omitempty"`
+	Code     json.RawMessage    `json:"code,omitempty"`
+	Source   string             `json:"source,omitempty"`
+	Message  string             `json:"message"`
+}
+
+// PublishDiagnosticsParams is the params for textDocument/publishDiagnostics.
+type PublishDiagnosticsParams struct {
+	URI         DocumentURI  `json:"uri"`
+	Version     int          `json:"version,omitempty"`
+	Diagnostics []Diagnostic `json:"diagnostics"`
+}
+
+// MarkupContent represents human-readable content.
+type MarkupContent struct {
+	Kind  string `json:"kind"`
+	Value string `json:"value"`
+}
+
+// Hover is the result of a hover request.
+type Hover struct {
+	Contents MarkupContent `json:"contents"`
+	Range    *Range        `json:"range,omitempty"`
+}
+
+// TextEdit represents a text edit operation.
+type TextEdit struct {
+	Range   Range  `json:"range"`
+	NewText string `json:"newText"`
+}
+
+// --- Initialize ---
+
+// InitializeParams is sent by the client to the server on startup.
+type InitializeParams struct {
+	ProcessID    int            `json:"processId"`
+	RootURI      DocumentURI    `json:"rootUri"`
+	Capabilities ClientCapabilities `json:"capabilities"`
+}
+
+// ClientCapabilities represents client capabilities (minimal for now).
+type ClientCapabilities struct {
+	TextDocument TextDocumentClientCapabilities `json:"textDocument,omitempty"`
+}
+
+// TextDocumentClientCapabilities represents text document capabilities.
+type TextDocumentClientCapabilities struct {
+	Synchronization *TextDocumentSyncClientCapabilities `json:"synchronization,omitempty"`
+	Hover           *HoverClientCapabilities            `json:"hover,omitempty"`
+	PublishDiagnostics *PublishDiagnosticsClientCapabilities `json:"publishDiagnostics,omitempty"`
+}
+
+// TextDocumentSyncClientCapabilities represents sync capabilities.
+type TextDocumentSyncClientCapabilities struct {
+	DynamicRegistration bool `json:"dynamicRegistration,omitempty"`
+	DidSave             bool `json:"didSave,omitempty"`
+}
+
+// HoverClientCapabilities represents hover capabilities.
+type HoverClientCapabilities struct {
+	ContentFormat []string `json:"contentFormat,omitempty"`
+}
+
+// PublishDiagnosticsClientCapabilities represents diagnostics capabilities.
+type PublishDiagnosticsClientCapabilities struct {
+	VersionSupport bool `json:"versionSupport,omitempty"`
+}
+
+// InitializeResult is the server's response to initialize.
+type InitializeResult struct {
+	Capabilities ServerCapabilities `json:"capabilities"`
+}
+
+// ServerCapabilities describes the server's capabilities.
+type ServerCapabilities struct {
+	TextDocumentSync           interface{}        `json:"textDocumentSync,omitempty"`
+	HoverProvider              bool               `json:"hoverProvider,omitempty"`
+	DefinitionProvider         bool               `json:"definitionProvider,omitempty"`
+	CompletionProvider         *CompletionOptions `json:"completionProvider,omitempty"`
+	DocumentFormattingProvider bool               `json:"documentFormattingProvider,omitempty"`
+}
+
+// CompletionOptions represents completion server capabilities.
+type CompletionOptions struct {
+	TriggerCharacters []string `json:"triggerCharacters,omitempty"`
+}
+
+// TextDocumentSyncKind defines how text documents are synced.
+type TextDocumentSyncKind int
+
+const (
+	SyncNone        TextDocumentSyncKind = 0
+	SyncFull        TextDocumentSyncKind = 1
+	SyncIncremental TextDocumentSyncKind = 2
+)
+
+// TextDocumentSyncOptions describes text document sync options.
+type TextDocumentSyncOptions struct {
+	OpenClose bool                 `json:"openClose,omitempty"`
+	Change    TextDocumentSyncKind `json:"change,omitempty"`
+	Save      *SaveOptions         `json:"save,omitempty"`
+}
+
+// SaveOptions controls save notifications.
+type SaveOptions struct {
+	IncludeText bool `json:"includeText,omitempty"`
+}
+
+// --- Document operations params ---
+
+// DidOpenTextDocumentParams is sent when a document is opened.
+type DidOpenTextDocumentParams struct {
+	TextDocument TextDocumentItem `json:"textDocument"`
+}
+
+// DidChangeTextDocumentParams is sent when a document changes.
+type DidChangeTextDocumentParams struct {
+	TextDocument   VersionedTextDocumentIdentifier  `json:"textDocument"`
+	ContentChanges []TextDocumentContentChangeEvent `json:"contentChanges"`
+}
+
+// DidSaveTextDocumentParams is sent when a document is saved.
+type DidSaveTextDocumentParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Text         *string                `json:"text,omitempty"`
+}
+
+// DidCloseTextDocumentParams is sent when a document is closed.
+type DidCloseTextDocumentParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+}
+
+// DocumentFormattingParams is sent for formatting requests.
+type DocumentFormattingParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Options      FormattingOptions      `json:"options"`
+}
+
+// FormattingOptions describes formatting options.
+type FormattingOptions struct {
+	TabSize      int  `json:"tabSize"`
+	InsertSpaces bool `json:"insertSpaces"`
+}
