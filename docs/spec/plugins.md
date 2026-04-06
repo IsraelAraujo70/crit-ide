@@ -57,6 +57,7 @@ Allow extension without turning the core into chaos.
 - Register completion source
 - Register panel
 - Register settings schema
+- Register language definition (syntax highlighting patterns, comment delimiters, file extensions)
 
 ## Important Events
 
@@ -102,6 +103,7 @@ entry = "./git-tools-plugin"
 | `eventNotification` | IDE → Plugin | Notify of editor events |
 | `requestCompletions` | IDE → Plugin | Ask for completion items |
 | `providePanelData` | Plugin → IDE | Send panel content |
+| `registerLanguage` | Plugin → IDE | Register syntax highlighting language definition |
 
 ### Pragmatic Security (V1)
 

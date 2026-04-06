@@ -14,6 +14,7 @@ import (
 	"github.com/israelcorrea/crit-ide/internal/filetree"
 	"github.com/israelcorrea/crit-ide/internal/highlight"
 	"github.com/israelcorrea/crit-ide/internal/input"
+	"github.com/israelcorrea/crit-ide/internal/logger"
 	"github.com/israelcorrea/crit-ide/internal/lsp"
 	"github.com/israelcorrea/crit-ide/internal/render"
 	"github.com/israelcorrea/crit-ide/internal/theme"
@@ -851,6 +852,7 @@ func (a *App) detectLanguage(buf *editor.Buffer) {
 	if def != nil {
 		buf.LanguageID = def.ID
 		a.highlighter.SetLanguageDef(def)
+		logger.Info("highlight: detected language %q for %s", def.ID, buf.FileName())
 	}
 }
 

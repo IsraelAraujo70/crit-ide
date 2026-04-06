@@ -7,6 +7,7 @@ import (
 	"os/exec"
 
 	"github.com/israelcorrea/crit-ide/internal/events"
+	"github.com/israelcorrea/crit-ide/internal/logger"
 )
 
 // Server manages a single language server process.
@@ -49,7 +50,13 @@ func (s *Server) Start() error {
 	s.notifyState("")
 
 	s.cmd = exec.Command(s.command, s.args...)
-	s.cmd.Stderr = os.Stderr // Let server stderr go to our stderr for debugging.
+	// Redirect server stderr to the debug log file when --debug is active,
+	// otherwise discard it to prevent corrupting the terminal UI.
+	if logger.Enabled() {
+		s.cmd.Stderr = logger.Writer()
+	}
+
+	logger.Info("lsp: starting %s %v (root=%s)", s.command, s.args, s.rootPath)
 
 	stdin, err := s.cmd.StdinPipe()
 	if err != nil {
@@ -68,8 +75,11 @@ func (s *Server) Start() error {
 	if err := s.cmd.Start(); err != nil {
 		s.state = StateCrashed
 		s.notifyState(err.Error())
+		logger.Error("lsp: failed to start %s: %v", s.command, err)
 		return fmt.Errorf("start server: %w", err)
 	}
+
+	logger.Info("lsp: process started (pid=%d)", s.cmd.Process.Pid)
 
 	s.client = NewClient(stdout, stdin)
 	s.client.OnNotification = s.handleNotification
@@ -121,6 +131,9 @@ func (s *Server) Initialize() error {
 
 	s.state = StateReady
 	s.notifyState("")
+	logger.Info("lsp: %s initialized (hover=%v, definition=%v, format=%v)",
+		s.langID, s.capabilities.HoverProvider, s.capabilities.DefinitionProvider,
+		s.capabilities.DocumentFormattingProvider)
 	return nil
 }
 
@@ -145,6 +158,7 @@ func (s *Server) Stop() error {
 
 	s.state = StateStopped
 	s.notifyState("")
+	logger.Info("lsp: %s stopped", s.langID)
 	return nil
 }
 
@@ -162,6 +176,7 @@ func (s *Server) DidOpen(uri DocumentURI, langID, content string) {
 			Text:       content,
 		},
 	})
+	logger.Debug("lsp: didOpen %s", uri)
 }
 
 // DidChange notifies the server of a document change (full sync).
@@ -286,12 +301,15 @@ func (s *Server) Format(uri DocumentURI) {
 
 // handleNotification processes server notifications.
 func (s *Server) handleNotification(method string, params json.RawMessage) {
+	logger.Debug("lsp: notification %s", method)
 	switch method {
 	case "textDocument/publishDiagnostics":
 		var p PublishDiagnosticsParams
 		if err := json.Unmarshal(params, &p); err != nil {
+			logger.Error("lsp: unmarshal diagnostics: %v", err)
 			return
 		}
+		logger.Debug("lsp: %d diagnostics for %s", len(p.Diagnostics), p.URI)
 		s.bus.Send(events.Event{
 			Type:    events.EventLSPDiagnostics,
 			Payload: &DiagnosticsPayload{URI: p.URI, Diagnostics: p.Diagnostics},

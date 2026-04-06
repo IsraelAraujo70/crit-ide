@@ -93,9 +93,15 @@ func (h *RegexHighlighter) highlightSegment(baseOffset int, text string) []Token
 	var tokens []Token
 
 	for _, rule := range h.lang.Patterns {
-		matches := rule.Pattern.FindAllStringIndex(text, -1)
+		matches := rule.Pattern.FindAllStringSubmatchIndex(text, -1)
 		for _, m := range matches {
+			// If the pattern has a capture group, use group 1 for the token range.
+			// This allows patterns like `\b([a-zA-Z_]\w*)\s*\(` to highlight
+			// only the identifier, not the trailing `(`.
 			start, end := m[0], m[1]
+			if len(m) >= 4 && m[2] >= 0 && m[3] >= 0 {
+				start, end = m[2], m[3]
+			}
 			// Check if any position in this range is already occupied.
 			overlap := false
 			for i := start; i < end; i++ {
@@ -107,8 +113,9 @@ func (h *RegexHighlighter) highlightSegment(baseOffset int, text string) []Token
 			if overlap {
 				continue
 			}
-			// Claim the range.
-			for i := start; i < end; i++ {
+			// Claim the full match range to prevent other rules from
+			// matching the anchoring characters (e.g., the `(` in a function call).
+			for i := m[0]; i < m[1]; i++ {
 				occupied[i] = true
 			}
 			tokens = append(tokens, Token{
