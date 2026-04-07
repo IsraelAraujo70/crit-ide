@@ -1,7 +1,7 @@
 package highlight
 
 // Highlighter produces highlight tokens for a document.
-// V1 is regex-based; V2 can swap in tree-sitter behind this interface.
+// Implemented by TreeSitterHighlighter using tree-sitter grammars.
 type Highlighter interface {
 	// HighlightLine returns tokens for a single line.
 	// lineIndex is the zero-based line number in the document.
