@@ -53,8 +53,8 @@ type App struct {
 	prompt *editor.PromptState
 
 	// Syntax highlighting.
-	highlighter *highlight.RegexHighlighter
-	langReg     *highlight.LangRegistry
+	highlighter *highlight.TreeSitterHighlighter
+	langReg     *highlight.TSLangRegistry
 	theme       *theme.Theme
 
 	// LSP.
@@ -66,14 +66,15 @@ type App struct {
 
 // New creates a new App. If filePath is non-empty, that file will be opened.
 func New(filePath string) *App {
+	reg := highlight.DefaultTSRegistry()
 	return &App{
 		filePath:    filePath,
 		bus:         events.NewBus(256),
 		registry:    actions.NewRegistry(),
 		scrollYs:    make(map[editor.BufferID]int),
 		treeWidth:   defaultTreeWidth,
-		highlighter: highlight.NewRegexHighlighter(),
-		langReg:     highlight.DefaultRegistry(),
+		highlighter: highlight.NewTreeSitterHighlighter(reg),
+		langReg:     reg,
 		theme:       theme.DefaultTheme(),
 		diagStore:   lsp.NewDiagnosticsStore(),
 		lastContent: make(map[editor.BufferID]string),
@@ -179,9 +180,9 @@ func (a *App) Run() error {
 			a.ensureCursorVisible()
 			a.notifyLSPIfChanged()
 
-			// Invalidate highlighter when buffer changes.
+			// Update highlighter source when buffer changes.
 			if a.ActiveBuffer().Dirty {
-				a.highlighter.InvalidateFrom(a.ActiveBuffer().CursorRow)
+				a.highlighter.SetSource(a.ActiveBuffer().Text.Content())
 			}
 
 			// If save action, notify LSP.
@@ -724,15 +725,13 @@ func (a *App) CloseBuffer(idx int) {
 func (a *App) SwitchBuffer(idx int) {
 	if idx >= 0 && idx < len(a.buffers) {
 		a.activeIdx = idx
-		// Switch highlighter to the new buffer's language.
+		// Switch highlighter to the new buffer's language and source.
 		buf := a.buffers[idx]
 		if buf.LanguageID != "" {
-			def := a.langReg.DetectLanguage(buf.Path)
-			if def != nil {
-				a.highlighter.SetLanguageDef(def)
-			}
+			a.highlighter.SetLanguage(buf.LanguageID)
+			a.highlighter.SetSource(buf.Text.Content())
 		} else {
-			a.highlighter.SetLanguageDef(nil)
+			a.highlighter.SetLanguage("")
 		}
 	}
 }
@@ -851,7 +850,8 @@ func (a *App) detectLanguage(buf *editor.Buffer) {
 	def := a.langReg.DetectLanguage(buf.Path)
 	if def != nil {
 		buf.LanguageID = def.ID
-		a.highlighter.SetLanguageDef(def)
+		a.highlighter.SetLanguage(def.ID)
+		a.highlighter.SetSource(buf.Text.Content())
 		logger.Info("highlight: detected language %q for %s", def.ID, buf.FileName())
 	}
 }
