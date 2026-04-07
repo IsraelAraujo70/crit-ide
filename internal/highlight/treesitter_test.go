@@ -214,6 +214,8 @@ func TestLangRegistryDetection(t *testing.T) {
 		{"index.html", "html"},
 		{"style.css", "css"},
 		{"run.sh", "shell"},
+		{"config.json", "json"},
+		{"README.md", "markdown"},
 		{"config.toml", "toml"},
 		{"docker-compose.yml", "yaml"},
 		{"unknown.xyz", ""},
@@ -283,6 +285,31 @@ func TestMultipleLanguages(t *testing.T) {
 	tokens = h.HighlightLine(0, "def foo():")
 	if !hasTokenType(tokens, TokenKeyword) {
 		t.Error("expected keyword in Python source")
+	}
+}
+
+func TestNilLanguageNoTokens(t *testing.T) {
+	// Languages without a tree-sitter grammar (JSON, Markdown) should be
+	// recognized by SetLanguage but produce no tokens.
+	reg := DefaultTSRegistry()
+	h := NewTreeSitterHighlighter(reg)
+
+	if !h.SetLanguage("json") {
+		t.Fatal("SetLanguage('json') should return true for registered language")
+	}
+	h.SetSource(`{"key": "value"}`)
+	tokens := h.HighlightLine(0, `{"key": "value"}`)
+	if tokens != nil {
+		t.Errorf("expected nil tokens for language without grammar, got: %v", tokens)
+	}
+
+	if !h.SetLanguage("markdown") {
+		t.Fatal("SetLanguage('markdown') should return true for registered language")
+	}
+	h.SetSource("# Hello\n\nWorld\n")
+	tokens = h.HighlightLine(0, "# Hello")
+	if tokens != nil {
+		t.Errorf("expected nil tokens for markdown without grammar, got: %v", tokens)
 	}
 }
 

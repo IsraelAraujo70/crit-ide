@@ -74,6 +74,8 @@ func DefaultTSRegistry() *TSLangRegistry {
 	r.Register(TSLangHTML())
 	r.Register(TSLangCSS())
 	r.Register(TSLangBash())
+	r.Register(TSLangJSON())
+	r.Register(TSLangMarkdown())
 	r.Register(TSLangTOML())
 	r.Register(TSLangYAML())
 	return r

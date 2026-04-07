@@ -31,8 +31,16 @@ func NewTreeSitterHighlighter(registry *TSLangRegistry) *TreeSitterHighlighter {
 }
 
 // SetLanguage switches to the given language ID.
-// Returns false if the language is not supported.
+// Returns false if the language is not in the registry.
+// Languages with no tree-sitter grammar (Language == nil) are recognized
+// but produce no highlighting tokens.
 func (h *TreeSitterHighlighter) SetLanguage(langID string) bool {
+	if langID == "" {
+		h.langDef = nil
+		h.langID = ""
+		h.tree = nil
+		return false
+	}
 	def := h.registry.ByID(langID)
 	if def == nil {
 		h.langDef = nil
@@ -45,9 +53,11 @@ func (h *TreeSitterHighlighter) SetLanguage(langID string) bool {
 	}
 	h.langID = langID
 	h.langDef = def
-	h.parser.SetLanguage(def.Language)
 	h.tree = nil
 	h.dirty = true
+	if def.Language != nil {
+		h.parser.SetLanguage(def.Language)
+	}
 	return true
 }
 
@@ -68,7 +78,7 @@ func (h *TreeSitterHighlighter) InvalidateFrom(lineIndex int) {
 
 // HighlightLine returns tokens for a single line.
 func (h *TreeSitterHighlighter) HighlightLine(lineIndex int, line string) []Token {
-	if h.langDef == nil || h.source == nil {
+	if h.langDef == nil || h.langDef.Language == nil || h.source == nil {
 		return nil
 	}
 

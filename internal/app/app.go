@@ -53,9 +53,10 @@ type App struct {
 	prompt *editor.PromptState
 
 	// Syntax highlighting.
-	highlighter *highlight.TreeSitterHighlighter
-	langReg     *highlight.TSLangRegistry
-	theme       *theme.Theme
+	highlighter          *highlight.TreeSitterHighlighter
+	langReg              *highlight.TSLangRegistry
+	theme                *theme.Theme
+	lastHighlightContent string // Tracks content to avoid redundant reparses.
 
 	// LSP.
 	lspManager  *lsp.Manager
@@ -180,9 +181,11 @@ func (a *App) Run() error {
 			a.ensureCursorVisible()
 			a.notifyLSPIfChanged()
 
-			// Update highlighter source when buffer changes.
-			if a.ActiveBuffer().Dirty {
-				a.highlighter.SetSource(a.ActiveBuffer().Text.Content())
+			// Update highlighter source only when content actually changed.
+			buf := a.ActiveBuffer()
+			if content := buf.Text.Content(); content != a.lastHighlightContent {
+				a.highlighter.SetSource(content)
+				a.lastHighlightContent = content
 			}
 
 			// If save action, notify LSP.
@@ -729,9 +732,12 @@ func (a *App) SwitchBuffer(idx int) {
 		buf := a.buffers[idx]
 		if buf.LanguageID != "" {
 			a.highlighter.SetLanguage(buf.LanguageID)
-			a.highlighter.SetSource(buf.Text.Content())
+			content := buf.Text.Content()
+			a.highlighter.SetSource(content)
+			a.lastHighlightContent = content
 		} else {
 			a.highlighter.SetLanguage("")
+			a.lastHighlightContent = ""
 		}
 	}
 }
@@ -851,8 +857,16 @@ func (a *App) detectLanguage(buf *editor.Buffer) {
 	if def != nil {
 		buf.LanguageID = def.ID
 		a.highlighter.SetLanguage(def.ID)
-		a.highlighter.SetSource(buf.Text.Content())
+		content := buf.Text.Content()
+		a.highlighter.SetSource(content)
+		a.lastHighlightContent = content
 		logger.Info("highlight: detected language %q for %s", def.ID, buf.FileName())
+	} else {
+		// Reset highlighter so stale tokens from the previous buffer
+		// are not applied to an unsupported file.
+		buf.LanguageID = ""
+		a.highlighter.SetLanguage("")
+		a.lastHighlightContent = ""
 	}
 }
 
