@@ -236,10 +236,13 @@ func (a *App) Run() error {
 				a.lastHighlightContent = content
 			}
 
-			// If save action, notify LSP and refresh git gutter.
+			// If save action, notify LSP and refresh git info.
 			if ev.ActionID == "file.save" {
 				a.notifyLSPSave()
 				a.refreshGitGutter()
+				if a.gitRepo != nil {
+					a.gitRepo.RefreshBranch()
+				}
 			}
 
 		case events.EventResize:
@@ -1716,7 +1719,7 @@ func (a *App) GitGraphLines() []editor.GitGraphLine {
 	return lines
 }
 
-// GitRefreshStatus refreshes the cached git status and gutter info.
+// GitRefreshStatus refreshes the cached git status, gutter, and branch info.
 func (a *App) GitRefreshStatus() {
 	if a.gitRepo == nil {
 		return
@@ -1726,6 +1729,8 @@ func (a *App) GitRefreshStatus() {
 	if buf.Path != "" {
 		a.gitGutterInfo = a.gitRepo.DiffForGutter(buf.Path)
 	}
+	// Invalidate branch cache so next render picks up any branch change.
+	a.gitRepo.RefreshBranch()
 }
 
 // --- Git mode handlers ---

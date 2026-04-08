@@ -76,6 +76,11 @@ type LineDiffInfo struct {
 // Repo represents a Git repository rooted at a directory.
 type Repo struct {
 	root string
+
+	// Branch cache — avoids shelling out to git on every render.
+	branchName    string
+	branchFetched time.Time
+	branchTTL     time.Duration
 }
 
 // NewRepo creates a Repo for the given directory. Returns nil if the
@@ -93,7 +98,7 @@ func NewRepo(dir string) *Repo {
 	if root == "" {
 		return nil
 	}
-	return &Repo{root: root}
+	return &Repo{root: root, branchTTL: 5 * time.Second}
 }
 
 // Root returns the repository root directory.
@@ -102,7 +107,23 @@ func (r *Repo) Root() string {
 }
 
 // CurrentBranch returns the name of the current branch, or "HEAD" if detached.
+// Results are cached for branchTTL (default 5s) to avoid shelling out on every render.
 func (r *Repo) CurrentBranch() string {
+	if r.branchName != "" && time.Since(r.branchFetched) < r.branchTTL {
+		return r.branchName
+	}
+	r.branchName = r.fetchBranch()
+	r.branchFetched = time.Now()
+	return r.branchName
+}
+
+// RefreshBranch forces a cache refresh on the next CurrentBranch() call.
+func (r *Repo) RefreshBranch() {
+	r.branchFetched = time.Time{} // Zero time invalidates cache.
+}
+
+// fetchBranch shells out to git to get the current branch name.
+func (r *Repo) fetchBranch() string {
 	out, err := r.run("rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {
 		return ""
