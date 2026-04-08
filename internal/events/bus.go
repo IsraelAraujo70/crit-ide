@@ -16,6 +16,7 @@ const (
 	EventLSPRename                       // LSP rename result. Payload: *lsp.RenamePayload.
 	EventLSPCodeAction                   // LSP code action result. Payload: *lsp.CodeActionPayload.
 	EventLSPSignatureHelp                // LSP signature help result. Payload: *lsp.SignatureHelpPayload.
+	EventTerminalOutput                  // Terminal output received. Payload: int (session ID).
 )
 
 // Event is the message passed through the event bus.

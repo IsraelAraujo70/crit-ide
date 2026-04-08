@@ -21,6 +21,7 @@ import (
 	"github.com/israelcorrea/crit-ide/internal/lsp"
 	"github.com/israelcorrea/crit-ide/internal/render"
 	"github.com/israelcorrea/crit-ide/internal/search"
+	terminalpkg "github.com/israelcorrea/crit-ide/internal/terminal"
 	"github.com/israelcorrea/crit-ide/internal/theme"
 )
 
@@ -97,6 +98,16 @@ type App struct {
 	gitGraph      *editor.GitGraphState
 	gitDiff       *editor.GitDiffState
 	gitGutterInfo []gitpkg.LineDiffInfo // Cached gutter diff for current buffer.
+
+	// Minimap.
+	minimapVisible bool
+
+	// Terminal integration.
+	termSessions    []*terminalpkg.Session
+	termActiveIdx   int
+	termVisible     bool
+	termHeight      int  // Height in rows (default: 1/3 of screen).
+	nextTermID      int  // Monotonic counter for session IDs.
 }
 
 // New creates a new App. If filePath is non-empty, that file will be opened.
@@ -135,6 +146,7 @@ func (a *App) Run() error {
 
 	// Cleanup on exit.
 	defer a.screen.Fini()
+	defer a.cleanupTerminals()
 
 	// Create renderer.
 	a.renderer = render.NewRenderer(a.screen)
@@ -223,6 +235,8 @@ func (a *App) Run() error {
 				a.handleGitDiffAction(ev.ActionID, ctx)
 			case actions.ModeCodeActions:
 				a.handleCodeActionsAction(ev.ActionID, ctx)
+			case actions.ModeTerminal:
+				a.handleTerminalAction(ev.ActionID, ctx)
 			}
 
 			// Execute any pending action (from menu item execution).
@@ -305,6 +319,9 @@ func (a *App) Run() error {
 
 		case events.EventLSPServerState:
 			// Server state change — could show in statusline in the future.
+
+		case events.EventTerminalOutput:
+			// Terminal output received — just re-render (state is updated via Lines()).
 		}
 
 		a.render()
@@ -343,7 +360,8 @@ func (a *App) handleNormalAction(actionID string, ctx *actions.ActionContext) {
 		"file.save", "tree.refresh", "edit.undo", "edit.redo",
 		"search.open", "finder.open", "completion.trigger", "palette.open", "project.search",
 		"git.status", "git.graph",
-		"lsp.rename", "lsp.code_action", "lsp.signature_help":
+		"lsp.rename", "lsp.code_action", "lsp.signature_help",
+		"terminal.toggle", "minimap.toggle":
 		_ = a.registry.Execute(actionID, ctx)
 		return
 	}
@@ -449,8 +467,27 @@ func (a *App) routeMouseClick(ctx *actions.ActionContext) {
 		return
 	}
 
+	// Calculate panel boundaries.
+	editorW := a.editorWidth(w)
+	minimapW := 0
+	if a.minimapVisible {
+		minimapW = render.MinimapWidth()
+		// Adjust editorWidth to exclude minimap.
+		editorW = editorW - minimapW
+		if editorW < 10 {
+			editorW = 10
+		}
+	}
+
+	// Minimap area click.
+	if a.minimapVisible && payload.ScreenX >= editorW && payload.ScreenX < editorW+minimapW {
+		a.focusArea = actions.FocusEditor
+		_ = a.registry.Execute("minimap.click", ctx)
+		return
+	}
+
 	// File tree area click (right side).
-	treeStartX := a.editorWidth(w)
+	treeStartX := editorW + minimapW
 	if a.treeVisible && payload.ScreenX >= treeStartX {
 		_ = a.registry.Execute("tree.click", ctx)
 		return
@@ -469,7 +506,18 @@ func (a *App) routeMouseScroll(ctx *actions.ActionContext) {
 	}
 
 	w, _ := a.screen.Size()
-	treeStartX := a.editorWidth(w)
+	editorW := a.editorWidth(w)
+	minimapW := 0
+	if a.minimapVisible {
+		minimapW = render.MinimapWidth()
+	}
+	treeStartX := editorW // editorWidth already accounts for minimap in the routing
+
+	// Scroll on minimap → scroll the editor.
+	if a.minimapVisible && payload.ScreenX >= editorW-minimapW && payload.ScreenX < editorW {
+		_ = a.registry.Execute("mouse.scroll", ctx)
+		return
+	}
 
 	if a.treeVisible && payload.ScreenX >= treeStartX {
 		// Scroll inside the tree — adjust tree scroll.
@@ -529,10 +577,11 @@ func (a *App) render() {
 		ActiveTabIdx: a.activeIdx,
 		TreeVisible:  a.treeVisible,
 		TreeWidth:    a.treeWidth,
-		TreeFocused:  a.focusArea == actions.FocusFileTree,
-		Highlighter:  a.highlighter,
-		Theme:        a.theme,
-		StatusMsg:    a.statusMsg,
+		TreeFocused:    a.focusArea == actions.FocusFileTree,
+		MinimapVisible: a.minimapVisible,
+		Highlighter:    a.highlighter,
+		Theme:          a.theme,
+		StatusMsg:      a.statusMsg,
 	}
 
 	if a.contextMenu != nil {
@@ -564,6 +613,11 @@ func (a *App) render() {
 	}
 	if a.gitDiff != nil {
 		vs.GitDiff = a.gitDiff
+	}
+
+	// Set terminal panel state.
+	if a.termVisible && len(a.termSessions) > 0 {
+		vs.Terminal = a.buildTerminalViewState()
 	}
 
 	// Set git branch for statusline.
@@ -1092,6 +1146,23 @@ func (a *App) FileTreeWidth() int {
 // TreeViewportHeight returns the height available for tree node content.
 func (a *App) TreeViewportHeight() int {
 	return a.treeViewportHeight()
+}
+
+// --- Minimap interface ---
+
+// MinimapVisible returns whether the minimap is currently visible.
+func (a *App) MinimapVisible() bool {
+	return a.minimapVisible
+}
+
+// SetMinimapVisible sets the minimap visibility.
+func (a *App) SetMinimapVisible(v bool) {
+	a.minimapVisible = v
+}
+
+// ToggleMinimap toggles the minimap visibility.
+func (a *App) ToggleMinimap() {
+	a.minimapVisible = !a.minimapVisible
 }
 
 // --- Focus area interface ---
@@ -2077,4 +2148,258 @@ func (a *App) maybeAutoTriggerSignatureHelp(ch string) {
 	if ch == ")" {
 		a.signatureHelp = nil
 	}
+}
+
+// --- Terminal integration ---
+
+// TerminalToggle toggles the terminal panel visibility.
+func (a *App) TerminalToggle() {
+	if !a.termVisible {
+		// Show terminal. Create a session if none exists.
+		if len(a.termSessions) == 0 {
+			a.createTerminalSession()
+		}
+		a.termVisible = true
+		a.inputMode = actions.ModeTerminal
+		a.focusArea = actions.FocusTerminal
+	} else if a.focusArea == actions.FocusTerminal {
+		// Terminal is visible and focused: hide it.
+		a.termVisible = false
+		a.inputMode = actions.ModeNormal
+		a.focusArea = actions.FocusEditor
+	} else {
+		// Terminal is visible but not focused: focus it.
+		a.inputMode = actions.ModeTerminal
+		a.focusArea = actions.FocusTerminal
+	}
+}
+
+// TerminalNew creates a new terminal session and focuses it.
+func (a *App) TerminalNew() {
+	a.createTerminalSession()
+	a.termActiveIdx = len(a.termSessions) - 1
+	if !a.termVisible {
+		a.termVisible = true
+	}
+	a.inputMode = actions.ModeTerminal
+	a.focusArea = actions.FocusTerminal
+}
+
+// TerminalClose closes the current terminal session.
+func (a *App) TerminalClose() {
+	if len(a.termSessions) == 0 {
+		return
+	}
+	session := a.termSessions[a.termActiveIdx]
+	session.Close()
+
+	// Remove from sessions.
+	a.termSessions = append(a.termSessions[:a.termActiveIdx], a.termSessions[a.termActiveIdx+1:]...)
+
+	if len(a.termSessions) == 0 {
+		a.termVisible = false
+		a.inputMode = actions.ModeNormal
+		a.focusArea = actions.FocusEditor
+		return
+	}
+
+	if a.termActiveIdx >= len(a.termSessions) {
+		a.termActiveIdx = len(a.termSessions) - 1
+	}
+}
+
+// TerminalNext switches to the next terminal session.
+func (a *App) TerminalNext() {
+	if len(a.termSessions) <= 1 {
+		return
+	}
+	a.termActiveIdx = (a.termActiveIdx + 1) % len(a.termSessions)
+}
+
+// TerminalSendInput sends raw input bytes to the active terminal.
+func (a *App) TerminalSendInput(data []byte) {
+	if len(a.termSessions) == 0 || a.termActiveIdx >= len(a.termSessions) {
+		return
+	}
+	session := a.termSessions[a.termActiveIdx]
+	if session.IsClosed() {
+		return
+	}
+	_ = session.Write(data)
+}
+
+// TerminalVisible returns whether the terminal panel is visible.
+func (a *App) TerminalVisible() bool {
+	return a.termVisible
+}
+
+// TerminalFocused returns whether the terminal has keyboard focus.
+func (a *App) TerminalFocused() bool {
+	return a.focusArea == actions.FocusTerminal
+}
+
+// createTerminalSession creates a new terminal session.
+func (a *App) createTerminalSession() {
+	a.nextTermID++
+	w, h := a.screen.Size()
+
+	if a.termHeight == 0 {
+		a.termHeight = h / 3
+		if a.termHeight < 5 {
+			a.termHeight = 5
+		}
+	}
+
+	termCols := w
+	termRows := a.termHeight - 2 // Account for border + tab bar.
+	if termRows < 1 {
+		termRows = 1
+	}
+
+	session, err := terminalpkg.NewSession(a.nextTermID, "", termCols, termRows, a.ProjectRoot(), func(sessionID int) {
+		// Called from the PTY reader goroutine — send event to bus.
+		a.bus.Send(events.Event{
+			Type:    events.EventTerminalOutput,
+			Payload: sessionID,
+		})
+	})
+	if err != nil {
+		a.statusMsg = fmt.Sprintf("Failed to create terminal: %v", err)
+		return
+	}
+
+	a.termSessions = append(a.termSessions, session)
+}
+
+// buildTerminalViewState builds the terminal render state from current sessions.
+func (a *App) buildTerminalViewState() *editor.TerminalState {
+	if len(a.termSessions) == 0 {
+		return nil
+	}
+
+	_, h := a.screen.Size()
+	if a.termHeight == 0 {
+		a.termHeight = h / 3
+	}
+
+	session := a.termSessions[a.termActiveIdx]
+	lines := session.Lines()
+
+	tabNames := make([]string, len(a.termSessions))
+	tabClosed := make([]bool, len(a.termSessions))
+	for i, s := range a.termSessions {
+		tabNames[i] = s.DisplayName()
+		tabClosed[i] = s.IsClosed()
+	}
+
+	return &editor.TerminalState{
+		Visible:   true,
+		Lines:     lines,
+		ScrollY:   0,
+		Height:    a.termHeight,
+		ActiveTab: a.termActiveIdx,
+		TabNames:  tabNames,
+		TabClosed: tabClosed,
+		Focused:   a.focusArea == actions.FocusTerminal,
+	}
+}
+
+// handleTerminalAction routes input events while the terminal is focused.
+func (a *App) handleTerminalAction(actionID string, ctx *actions.ActionContext) {
+	// Ctrl+` always toggles terminal (handled as global action).
+	if actionID == "terminal.toggle" {
+		a.TerminalToggle()
+		return
+	}
+
+	// Terminal-specific actions.
+	switch actionID {
+	case "terminal.new":
+		a.TerminalNew()
+		return
+	case "terminal.close":
+		a.TerminalClose()
+		return
+	case "terminal.next":
+		a.TerminalNext()
+		return
+	}
+
+	if len(a.termSessions) == 0 || a.termActiveIdx >= len(a.termSessions) {
+		return
+	}
+	session := a.termSessions[a.termActiveIdx]
+	if session.IsClosed() {
+		return
+	}
+
+	// Route keyboard input to the PTY.
+	switch actionID {
+	case "insert.char":
+		if ch, ok := ctx.Event.Payload.(rune); ok {
+			_ = session.WriteString(string(ch))
+		}
+	case "insert.newline":
+		_ = session.Write([]byte{'\r'})
+	case "delete.backward":
+		_ = session.Write([]byte{0x7f}) // DEL (backspace in terminal).
+	case "delete.forward":
+		_ = session.Write([]byte{0x1b, '[', '3', '~'}) // ESC[3~ = Delete key.
+	case "cursor.up":
+		_ = session.Write([]byte{0x1b, '[', 'A'})
+	case "cursor.down":
+		_ = session.Write([]byte{0x1b, '[', 'B'})
+	case "cursor.right":
+		_ = session.Write([]byte{0x1b, '[', 'C'})
+	case "cursor.left":
+		_ = session.Write([]byte{0x1b, '[', 'D'})
+	case "cursor.home":
+		_ = session.Write([]byte{0x1b, '[', 'H'})
+	case "cursor.end":
+		_ = session.Write([]byte{0x1b, '[', 'F'})
+	case "edit.indent": // Tab key.
+		_ = session.Write([]byte{'\t'})
+	case "input.escape":
+		_ = session.Write([]byte{0x1b})
+	case "clipboard.copy":
+		// Ctrl+C in terminal = SIGINT.
+		_ = session.Write([]byte{0x03})
+	case "clipboard.cut":
+		// Ctrl+X in terminal.
+		_ = session.Write([]byte{0x18})
+	case "clipboard.paste":
+		// Paste from system clipboard into terminal.
+		clip := a.Clipboard()
+		if clip != nil {
+			text, err := clip.Read()
+			if err == nil && text != "" {
+				_ = session.WriteString(text)
+			}
+		}
+	case "scroll.up":
+		// Page up in terminal.
+		_ = session.Write([]byte{0x1b, '[', '5', '~'})
+	case "scroll.down":
+		// Page down in terminal.
+		_ = session.Write([]byte{0x1b, '[', '6', '~'})
+	case "file.save":
+		// Ctrl+S: pass through.
+		_ = session.Write([]byte{0x13})
+	case "app.quit":
+		// Ctrl+Q: still quit the app.
+		_ = a.registry.Execute(actionID, ctx)
+	case "select.all":
+		// Ctrl+A in terminal.
+		_ = session.Write([]byte{0x01})
+	default:
+		// Ignore unmapped actions while terminal is focused.
+	}
+}
+
+// cleanupTerminals closes all terminal sessions.
+func (a *App) cleanupTerminals() {
+	for _, s := range a.termSessions {
+		s.Close()
+	}
+	a.termSessions = nil
 }

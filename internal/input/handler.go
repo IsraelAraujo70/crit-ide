@@ -202,6 +202,28 @@ func (h *Handler) handleKey(ev *tcell.EventKey) {
 		}
 	}
 
+	// Ctrl+Shift+M → minimap toggle.
+	if ev.Modifiers()&tcell.ModCtrl != 0 && ev.Modifiers()&tcell.ModShift != 0 {
+		if ev.Key() == tcell.KeyRune && (ev.Rune() == 'M' || ev.Rune() == 'm') {
+			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "minimap.toggle"})
+			return
+		}
+	}
+
+	// Ctrl+` (backtick) → terminal toggle.
+	// tcell sends Ctrl+` as Ctrl+Rune with rune '`' on some terminals,
+	// or as KeyCtrlSpace/KeyNUL on others. We also check for the raw rune.
+	if ev.Modifiers()&tcell.ModCtrl != 0 && ev.Key() == tcell.KeyRune && ev.Rune() == '`' {
+		h.bus.Send(events.Event{Type: events.EventAction, ActionID: "terminal.toggle"})
+		return
+	}
+
+	// Ctrl+Shift+` → new terminal session.
+	if ev.Modifiers()&tcell.ModCtrl != 0 && ev.Modifiers()&tcell.ModShift != 0 && ev.Key() == tcell.KeyRune && ev.Rune() == '~' {
+		h.bus.Send(events.Event{Type: events.EventAction, ActionID: "terminal.new"})
+		return
+	}
+
 	// Ctrl+Arrow for word movement.
 	if ev.Modifiers()&tcell.ModCtrl != 0 {
 		switch ev.Key() {

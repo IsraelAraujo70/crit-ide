@@ -104,6 +104,12 @@ type ViewState struct {
 
 	// Git branch for statusline.
 	GitBranch    string
+
+	// Minimap.
+	MinimapVisible bool
+
+	// Terminal panel.
+	Terminal     *editor.TerminalState // Non-nil when terminal panel is visible.
 }
 
 // Renderer draws the editor state to a tcell screen.
@@ -134,7 +140,7 @@ func (r *Renderer) Render(vs *ViewState) {
 		editorHeight = 1
 	}
 
-	// Calculate editor width (accounting for file tree on the right).
+	// Calculate editor width (accounting for minimap and file tree on the right).
 	treeWidth := 0
 	if vs.TreeVisible {
 		treeWidth = vs.TreeWidth
@@ -142,7 +148,11 @@ func (r *Renderer) Render(vs *ViewState) {
 			treeWidth = 30
 		}
 	}
-	editorWidth := vs.Width - treeWidth
+	minimapWidth := 0
+	if vs.MinimapVisible {
+		minimapWidth = minimapColumnWidth + 1 // +1 for border
+	}
+	editorWidth := vs.Width - treeWidth - minimapWidth
 	if editorWidth < 10 {
 		editorWidth = 10
 	}
@@ -160,7 +170,7 @@ func (r *Renderer) Render(vs *ViewState) {
 		editorBorderColor = focusBorderColor
 	}
 	editorBorderStyle := tcell.StyleDefault.Foreground(editorBorderColor).Background(tcell.ColorDefault)
-	for x := 0; x < editorWidth; x++ {
+	for x := 0; x < editorWidth+minimapWidth; x++ {
 		r.screen.SetContent(x, tabBarHeight, tcell.RuneHLine, nil, editorBorderStyle)
 	}
 
@@ -332,13 +342,18 @@ func (r *Renderer) Render(vs *ViewState) {
 		}
 	}
 
+	// --- Draw minimap (between editor and file tree) ---
+	if vs.MinimapVisible {
+		r.drawMinimap(vs, editorWidth, minimapWidth, tabBarHeight, editorHeight, contentStartY)
+	}
+
 	// --- Draw file tree (right panel) ---
 	if vs.TreeVisible {
 		treeBorderColor := dimBorderColor
 		if vs.TreeFocused {
 			treeBorderColor = focusBorderColor
 		}
-		r.drawFileTree(vs, editorWidth, treeWidth, tabBarHeight, editorHeight+1, treeBorderColor)
+		r.drawFileTree(vs, editorWidth+minimapWidth, treeWidth, tabBarHeight, editorHeight+1, treeBorderColor)
 	}
 
 	// --- Draw statusline, prompt, or search bar ---
@@ -385,6 +400,11 @@ func (r *Renderer) Render(vs *ViewState) {
 		} else {
 			r.screen.HideCursor()
 		}
+	}
+
+	// --- Draw terminal panel if visible ---
+	if vs.Terminal != nil && vs.Terminal.Visible {
+		r.renderTerminal(vs.Terminal, vs.Width, vs.Height)
 	}
 
 	// --- Draw file finder popup if active ---
@@ -732,6 +752,311 @@ func (r *Renderer) screenCol(buf *editor.Buffer, gutterWidth int) int {
 // gutterWidth delegates to editor.GutterWidth for a single source of truth.
 func (r *Renderer) gutterWidth(lineCount int) int {
 	return editor.GutterWidth(lineCount)
+}
+
+// --- Minimap ---
+
+const minimapColumnWidth = 12 // Width of the minimap content area (chars).
+const minimapLinesPerRow = 3  // How many buffer lines each minimap row represents.
+
+// MinimapWidth returns the total minimap width including the border.
+func MinimapWidth() int {
+	return minimapColumnWidth + 1
+}
+
+// drawMinimap renders a compacted code overview between the editor and file tree.
+// Each minimap row represents ~3 lines of actual code, using half-block Unicode
+// characters (▀▄) to compress 2 sub-rows into 1 terminal row.
+// It shows: viewport indicator, diagnostic markers, search matches, and cursor line.
+func (r *Renderer) drawMinimap(vs *ViewState, startX, mmWidth, tabBarRow, editorHeight, contentStartY int) {
+	lineCount := vs.Buffer.Text.LineCount()
+	if lineCount == 0 {
+		return
+	}
+
+	// Styles.
+	borderColor := tcell.NewRGBColor(50, 50, 50)
+	borderStyle := tcell.StyleDefault.Foreground(borderColor).Background(tcell.NewRGBColor(20, 20, 20))
+	mmBg := tcell.NewRGBColor(20, 20, 20)
+	mmDefaultStyle := tcell.StyleDefault.Foreground(tcell.NewRGBColor(70, 70, 80)).Background(mmBg)
+	vpBg := tcell.NewRGBColor(35, 35, 50)         // Viewport indicator background.
+	cursorMarker := tcell.NewRGBColor(255, 255, 255) // Cursor line marker.
+	errorMarker := tcell.NewRGBColor(220, 60, 60)   // Error marker.
+	warnMarker := tcell.NewRGBColor(200, 180, 60)   // Warning marker.
+	searchMarker := tcell.NewRGBColor(200, 140, 50)  // Search match marker.
+
+	// Draw border (vertical line at startX).
+	for row := 0; row < editorHeight; row++ {
+		r.screen.SetContent(startX, contentStartY+row, tcell.RuneVLine, nil, borderStyle)
+	}
+
+	// Also draw top border for the minimap.
+	r.screen.SetContent(startX, tabBarRow, tcell.RuneTTee, nil, borderStyle)
+
+	contentX := startX + 1
+	contentW := mmWidth - 1
+	if contentW < 1 {
+		return
+	}
+
+	// Build marker maps for diagnostics and search matches.
+	diagLines := make(map[int]int) // line → severity (1=error,2=warn,etc.)
+	for _, d := range vs.Diagnostics {
+		if prev, ok := diagLines[d.Line]; !ok || d.Severity < prev {
+			diagLines[d.Line] = d.Severity
+		}
+	}
+
+	searchLines := make(map[int]bool)
+	if vs.Search != nil {
+		for _, m := range vs.Search.Matches {
+			searchLines[m.Start.Line] = true
+		}
+	}
+
+	// Calculate how many buffer lines each minimap row covers.
+	// We want the entire file to fit in the minimap height if possible,
+	// but at minimum each row represents minimapLinesPerRow lines.
+	mmHeight := editorHeight
+	linesPerRow := minimapLinesPerRow
+	totalNeeded := (lineCount + linesPerRow - 1) / linesPerRow
+	if totalNeeded <= mmHeight {
+		// Entire file fits in the minimap.
+	} else {
+		// Scale up lines per row so file fits (approximately).
+		linesPerRow = (lineCount + mmHeight - 1) / mmHeight
+		if linesPerRow < minimapLinesPerRow {
+			linesPerRow = minimapLinesPerRow
+		}
+	}
+
+	// Calculate minimap scroll offset (center the visible region).
+	mmScrollOffset := 0
+	totalRows := (lineCount + linesPerRow - 1) / linesPerRow
+	if totalRows > mmHeight {
+		// Center the viewport in the minimap.
+		vpCenterLine := vs.ScrollY + editorHeight/2
+		vpCenterRow := vpCenterLine / linesPerRow
+		mmScrollOffset = vpCenterRow - mmHeight/2
+		if mmScrollOffset < 0 {
+			mmScrollOffset = 0
+		}
+		if mmScrollOffset > totalRows-mmHeight {
+			mmScrollOffset = totalRows - mmHeight
+		}
+	}
+
+	// Viewport range in minimap rows.
+	vpStartRow := vs.ScrollY / linesPerRow
+	vpEndRow := (vs.ScrollY + editorHeight - 1) / linesPerRow
+
+	for row := 0; row < mmHeight; row++ {
+		screenRow := contentStartY + row
+		mmRow := mmScrollOffset + row
+		startLine := mmRow * linesPerRow
+
+		if startLine >= lineCount {
+			// Beyond file: clear the row.
+			for col := 0; col < contentW; col++ {
+				r.screen.SetContent(contentX+col, screenRow, ' ', nil, mmDefaultStyle)
+			}
+			continue
+		}
+
+		// Check if this row is within the visible viewport.
+		inViewport := mmRow >= vpStartRow && mmRow <= vpEndRow
+		rowBg := mmBg
+		if inViewport {
+			rowBg = vpBg
+		}
+
+		// Check for markers in this row's line range.
+		hasError := false
+		hasWarn := false
+		hasSearch := false
+		hasCursor := false
+		endLine := startLine + linesPerRow
+		if endLine > lineCount {
+			endLine = lineCount
+		}
+		for l := startLine; l < endLine; l++ {
+			if sev, ok := diagLines[l]; ok {
+				if sev == 1 {
+					hasError = true
+				} else if sev == 2 {
+					hasWarn = true
+				}
+			}
+			if searchLines[l] {
+				hasSearch = true
+			}
+			if l == vs.Buffer.CursorRow {
+				hasCursor = true
+			}
+		}
+
+		// Build a compressed representation of the code lines.
+		// Sample the first few characters of each line in this group.
+		compressedLine := r.minimapCompressLines(vs, startLine, endLine, contentW)
+
+		for col := 0; col < contentW; col++ {
+			ch := ' '
+			fg := tcell.NewRGBColor(70, 70, 80)
+			bg := rowBg
+
+			if col < len(compressedLine) {
+				ch = compressedLine[col].ch
+				fg = compressedLine[col].fg
+			}
+
+			style := tcell.StyleDefault.Foreground(fg).Background(bg)
+			r.screen.SetContent(contentX+col, screenRow, ch, nil, style)
+		}
+
+		// Draw markers in the rightmost column (scrollbar-like gutter).
+		markerCol := contentX + contentW - 1
+		if hasError {
+			style := tcell.StyleDefault.Foreground(errorMarker).Background(rowBg)
+			r.screen.SetContent(markerCol, screenRow, '▐', nil, style)
+		} else if hasWarn {
+			style := tcell.StyleDefault.Foreground(warnMarker).Background(rowBg)
+			r.screen.SetContent(markerCol, screenRow, '▐', nil, style)
+		} else if hasSearch {
+			style := tcell.StyleDefault.Foreground(searchMarker).Background(rowBg)
+			r.screen.SetContent(markerCol, screenRow, '▐', nil, style)
+		} else if hasCursor {
+			style := tcell.StyleDefault.Foreground(cursorMarker).Background(rowBg)
+			r.screen.SetContent(markerCol, screenRow, '▐', nil, style)
+		}
+	}
+}
+
+// minimapCell represents a single character in the minimap compressed view.
+type minimapCell struct {
+	ch rune
+	fg tcell.Color
+}
+
+// minimapCompressLines compresses a range of buffer lines into a single minimap row.
+// It picks the most "representative" line from the group and condenses it.
+func (r *Renderer) minimapCompressLines(vs *ViewState, startLine, endLine, width int) []minimapCell {
+	cells := make([]minimapCell, 0, width)
+
+	// Pick the line with the most content from this group.
+	bestLine := startLine
+	bestLen := 0
+	for l := startLine; l < endLine; l++ {
+		line := vs.Buffer.Text.Line(l)
+		trimmed := strings.TrimLeft(line, " \t")
+		if len(trimmed) > bestLen {
+			bestLen = len(trimmed)
+			bestLine = l
+		}
+	}
+
+	line := vs.Buffer.Text.Line(bestLine)
+
+	// Get highlight tokens for this line.
+	var tokens []highlight.Token
+	if vs.Highlighter != nil {
+		tokens = vs.Highlighter.HighlightLine(bestLine, line)
+	}
+
+	// Dim the colors for minimap display.
+	dimFactor := 0.4
+
+	col := 0
+	tokenIdx := 0
+	byteOff := 0
+	for _, ch := range line {
+		if col >= width-1 { // -1 for marker column
+			break
+		}
+
+		runeLen := len(string(ch))
+
+		// Determine color from highlight tokens.
+		fg := tcell.NewRGBColor(70, 70, 80) // Default dim gray.
+		for tokenIdx < len(tokens) && tokens[tokenIdx].End <= byteOff {
+			tokenIdx++
+		}
+		if tokenIdx < len(tokens) && tokens[tokenIdx].Start <= byteOff && byteOff < tokens[tokenIdx].End {
+			if vs.Theme != nil {
+				style := vs.Theme.StyleFor(tokens[tokenIdx].Type)
+				fgColor, _, _ := style.Decompose()
+				// Dim the foreground color.
+				r2, g2, b2 := fgColor.RGB()
+				fg = tcell.NewRGBColor(
+					int32(float64(r2)*dimFactor),
+					int32(float64(g2)*dimFactor),
+					int32(float64(b2)*dimFactor),
+				)
+			}
+		}
+
+		if ch == '\t' {
+			spaces := 4 - (col % 4)
+			for s := 0; s < spaces && col < width-1; s++ {
+				cells = append(cells, minimapCell{ch: ' ', fg: fg})
+				col++
+			}
+		} else if ch == ' ' {
+			cells = append(cells, minimapCell{ch: ' ', fg: fg})
+			col++
+		} else {
+			// Use half-block char for compact display of code characters.
+			cells = append(cells, minimapCell{ch: '▪', fg: fg})
+			col++
+		}
+
+		byteOff += runeLen
+	}
+
+	return cells
+}
+
+// MinimapClickToLine converts a minimap screen row click to a target buffer line.
+// Returns the center line of the range that minimap row represents.
+func MinimapClickToLine(screenY, contentStartY, editorHeight, lineCount, scrollY int) int {
+	mmRow := screenY - contentStartY
+	if mmRow < 0 {
+		return 0
+	}
+
+	mmHeight := editorHeight
+	linesPerRow := minimapLinesPerRow
+	totalRows := (lineCount + linesPerRow - 1) / linesPerRow
+	if totalRows > mmHeight {
+		linesPerRow = (lineCount + mmHeight - 1) / mmHeight
+		if linesPerRow < minimapLinesPerRow {
+			linesPerRow = minimapLinesPerRow
+		}
+	}
+
+	// Calculate scroll offset (must match drawMinimap logic).
+	mmScrollOffset := 0
+	totalRows = (lineCount + linesPerRow - 1) / linesPerRow
+	if totalRows > mmHeight {
+		vpCenterLine := scrollY + editorHeight/2
+		vpCenterRow := vpCenterLine / linesPerRow
+		mmScrollOffset = vpCenterRow - mmHeight/2
+		if mmScrollOffset < 0 {
+			mmScrollOffset = 0
+		}
+		if mmScrollOffset > totalRows-mmHeight {
+			mmScrollOffset = totalRows - mmHeight
+		}
+	}
+
+	targetRow := mmScrollOffset + mmRow
+	targetLine := targetRow*linesPerRow + linesPerRow/2
+	if targetLine >= lineCount {
+		targetLine = lineCount - 1
+	}
+	if targetLine < 0 {
+		targetLine = 0
+	}
+	return targetLine
 }
 
 // renderPopup draws a context menu popup on top of existing content.

@@ -126,6 +126,25 @@
       ]
     },
     {
+      "name": "Minimap",
+      "status": "done",
+      "summary": "Code minimap with viewport indicator, diagnostic markers, and click-to-scroll",
+      "deliverables": [
+        { "item": "Minimap column (12 chars) rendering compacted code preview", "status": "done" },
+        { "item": "Half-block Unicode chars for compact display", "status": "done" },
+        { "item": "Syntax-highlighted colors (dimmed) from tree-sitter tokens", "status": "done" },
+        { "item": "Viewport indicator (highlighted region showing visible area)", "status": "done" },
+        { "item": "Diagnostic markers (red=error, yellow=warning) in gutter", "status": "done" },
+        { "item": "Search match markers (orange) in gutter", "status": "done" },
+        { "item": "Cursor line marker (white) in gutter", "status": "done" },
+        { "item": "Click on minimap to scroll to position", "status": "done" },
+        { "item": "Scroll on minimap scrolls editor", "status": "done" },
+        { "item": "Toggle minimap with Ctrl+Shift+M", "status": "done" },
+        { "item": "Command palette entry for minimap toggle", "status": "done" },
+        { "item": "Auto-scaling: adapts lines-per-row to fit entire file", "status": "done" }
+      ]
+    },
+    {
       "name": "Splits",
       "status": "planned",
       "summary": "Horizontal/vertical splits with multiple views per buffer",
@@ -168,11 +187,18 @@
     },
     {
       "name": "Terminal & Tasks",
-      "status": "planned",
-      "summary": "Embedded terminal pane and task runner",
+      "status": "in-progress",
+      "summary": "Embedded terminal pane with PTY, multiple sessions, ANSI color rendering",
       "deliverables": [
-        { "item": "Terminal pane with PTY integration", "status": "planned" },
-        { "item": "Multiple terminal sessions", "status": "planned" },
+        { "item": "Terminal pane with PTY integration (creack/pty)", "status": "done" },
+        { "item": "Multiple terminal sessions with tab bar", "status": "done" },
+        { "item": "ANSI escape code parsing (colors, bold, italic, 256-color, truecolor)", "status": "done" },
+        { "item": "Input routing: all keys to PTY when terminal focused (except Ctrl+`)", "status": "done" },
+        { "item": "Ctrl+` toggle, Ctrl+Shift+` new session", "status": "done" },
+        { "item": "Ctrl+C sends SIGINT to terminal process", "status": "done" },
+        { "item": "Terminal panel rendering at bottom (1/3 height)", "status": "done" },
+        { "item": "Actions: terminal.toggle, terminal.new, terminal.close, terminal.next", "status": "done" },
+        { "item": "PTY creation and ANSI parsing tests (19 tests)", "status": "done" },
         { "item": "Task runner (build, test, lint)", "status": "planned" },
         { "item": "Problem matcher (click error → go to file:line)", "status": "planned" }
       ]
@@ -228,7 +254,9 @@
     "project.search_backspace", "project.search_delete",
     "project.search_left", "project.search_right", "project.search_home", "project.search_end",
     "project.search_execute", "project.search_up", "project.search_down",
-    "project.search_open_result", "project.search_next"
+    "project.search_open_result", "project.search_next",
+    "terminal.toggle", "terminal.new", "terminal.close", "terminal.next",
+    "minimap.toggle", "minimap.click"
   ],
   "keybindings": {
     "Arrow Up/Down/Left/Right": "cursor movement (or tree nav when tree focused)",
@@ -295,6 +323,10 @@
     "( (auto-trigger)": "signature help auto-trigger on function call open paren",
     "Up/Down (in code actions)": "code_action.up/down — navigate code action items",
     "Enter (in code actions)": "code_action.execute — apply selected code action",
-    "Escape (in code actions)": "code_action.dismiss — close code actions popup"
+    "Escape (in code actions)": "code_action.dismiss — close code actions popup",
+    "Ctrl+`": "terminal.toggle — toggle embedded terminal panel",
+    "Ctrl+Shift+`": "terminal.new — open new terminal session",
+    "All keys (terminal focused)": "sent to PTY (except Ctrl+` for toggle)",
+    "Ctrl+C (terminal focused)": "SIGINT to terminal process"
   }
 }

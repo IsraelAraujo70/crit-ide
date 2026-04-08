@@ -272,6 +272,10 @@ func RegisterAll(r *Registry) {
 	// Word selection.
 	r.Register(&selectWord{})
 
+	// Minimap.
+	r.Register(&minimapToggle{})
+	r.Register(&minimapClick{})
+
 	// Search / Find & Replace.
 	r.Register(&searchOpen{})
 	r.Register(&searchClose{})
@@ -302,4 +306,7 @@ func RegisterAll(r *Registry) {
 
 	// Git actions (Ctrl+Shift+G / F6).
 	RegisterGitActions(r)
+
+	// Terminal actions (Ctrl+`).
+	RegisterTerminalActions(r)
 }
