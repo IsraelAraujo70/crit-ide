@@ -327,6 +327,8 @@
     "Ctrl+`": "terminal.toggle — toggle embedded terminal panel",
     "Ctrl+Shift+`": "terminal.new — open new terminal session",
     "All keys (terminal focused)": "sent to PTY (except Ctrl+` for toggle)",
-    "Ctrl+C (terminal focused)": "SIGINT to terminal process"
+    "Ctrl+C (terminal focused)": "SIGINT to terminal process",
+    "Ctrl+Shift+M": "minimap.toggle — toggle code minimap panel",
+    "Minimap click": "minimap.click — scroll to clicked position in minimap"
   }
 }

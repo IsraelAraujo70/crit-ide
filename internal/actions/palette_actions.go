@@ -35,6 +35,7 @@ func DefaultPaletteEntries() []editor.PaletteEntry {
 		{ID: "tab.next", Label: "Next Tab", Keybinding: "Ctrl+PgDn", Category: "View"},
 		{ID: "tab.prev", Label: "Previous Tab", Keybinding: "Ctrl+PgUp", Category: "View"},
 		{ID: "tab.close", Label: "Close Tab", Keybinding: "Ctrl+W", Category: "View"},
+		{ID: "minimap.toggle", Label: "Toggle Minimap", Keybinding: "Ctrl+Shift+M", Category: "View"},
 
 		// Search
 		{ID: "search.open", Label: "Find / Replace", Keybinding: "Ctrl+F", Category: "Search"},

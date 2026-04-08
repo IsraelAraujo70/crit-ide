@@ -157,6 +157,11 @@ type AppState interface {
 	// Signature help.
 	SignatureHelpState() *editor.SignatureHelpState
 	SetSignatureHelpState(sh *editor.SignatureHelpState)
+
+	// Minimap.
+	MinimapVisible() bool
+	SetMinimapVisible(v bool)
+	ToggleMinimap()
 }
 
 // ActionContext carries everything an action needs to execute.

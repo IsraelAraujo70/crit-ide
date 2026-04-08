@@ -118,6 +118,11 @@ func (m *mockApp) ApplyCodeAction(idx int)                           {}
 func (m *mockApp) SignatureHelpState() *editor.SignatureHelpState     { return nil }
 func (m *mockApp) SetSignatureHelpState(sh *editor.SignatureHelpState) {}
 
+// Minimap stubs.
+func (m *mockApp) MinimapVisible() bool    { return false }
+func (m *mockApp) SetMinimapVisible(v bool) {}
+func (m *mockApp) ToggleMinimap()          {}
+
 func newTestContext(app *mockApp, actionID string, payload any) *ActionContext {
 	return &ActionContext{
 		App: app,
