@@ -102,7 +102,10 @@
         { "item": "Error/warning count in statusline", "status": "done" },
         { "item": "Autocomplete (Ctrl+Space / auto-trigger on trigger chars)", "status": "done" },
         { "item": "Completion popup with kind icons, detail, scroll, prefix filtering", "status": "done" },
-        { "item": "ModeCompletion input routing (Up/Down/Enter/Tab/Escape/typing)", "status": "done" }
+        { "item": "ModeCompletion input routing (Up/Down/Enter/Tab/Escape/typing)", "status": "done" },
+        { "item": "Rename Symbol (F2) — prompt with pre-filled symbol name, LSP textDocument/rename, WorkspaceEdit across files", "status": "done" },
+        { "item": "Code Actions (Ctrl+.) — textDocument/codeAction, popup with action list, apply WorkspaceEdit", "status": "done" },
+        { "item": "Signature Help — auto-trigger on (, textDocument/signatureHelp, active parameter highlight", "status": "done" }
       ]
     },
     {
@@ -207,7 +210,8 @@
     "prompt.char", "prompt.backspace", "prompt.delete",
     "prompt.left", "prompt.right", "prompt.home", "prompt.end",
     "prompt.cancel", "prompt.confirm",
-    "lsp.hover", "lsp.definition", "lsp.format",
+    "lsp.hover", "lsp.definition", "lsp.format", "lsp.rename", "lsp.code_action", "lsp.signature_help",
+    "code_action.up", "code_action.down", "code_action.execute", "code_action.dismiss",
     "search.open", "search.close", "search.char", "search.backspace", "search.delete",
     "search.left", "search.right", "search.home", "search.end",
     "search.next", "search.prev", "search.toggle_replace",
@@ -285,6 +289,12 @@
     "Enter (in project search, on result)": "project.search_open_result — open file at match",
     "Up/Down (in project search)": "project.search_up/down — navigate results",
     "F3 (in project search)": "project.search_next — jump to next match result",
-    "Escape (in project search)": "project.search_close — close project search"
+    "Escape (in project search)": "project.search_close — close project search",
+    "F2": "lsp.rename — rename symbol under cursor",
+    "Ctrl+.": "lsp.code_action — show available code actions",
+    "( (auto-trigger)": "signature help auto-trigger on function call open paren",
+    "Up/Down (in code actions)": "code_action.up/down — navigate code action items",
+    "Enter (in code actions)": "code_action.execute — apply selected code action",
+    "Escape (in code actions)": "code_action.dismiss — close code actions popup"
   }
 }

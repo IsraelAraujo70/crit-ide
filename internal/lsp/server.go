@@ -134,9 +134,11 @@ func (s *Server) Initialize() error {
 
 	s.state = StateReady
 	s.notifyState("")
-	logger.Info("lsp: %s initialized (hover=%v, definition=%v, format=%v, completion=%v)",
+	logger.Info("lsp: %s initialized (hover=%v, definition=%v, format=%v, completion=%v, rename=%v, codeAction=%v, sigHelp=%v)",
 		s.langID, s.capabilities.HoverProvider, s.capabilities.DefinitionProvider,
-		s.capabilities.DocumentFormattingProvider, s.capabilities.CompletionProvider != nil)
+		s.capabilities.DocumentFormattingProvider, s.capabilities.CompletionProvider != nil,
+		s.capabilities.RenameProvider != nil, s.capabilities.CodeActionProvider != nil,
+		s.capabilities.SignatureHelpProvider != nil)
 	return nil
 }
 
@@ -343,6 +345,123 @@ func (s *Server) Completion(uri DocumentURI, pos Position, triggerKind Completio
 			Payload: &CompletionPayload{Items: list.Items, IsIncomplete: list.IsIncomplete},
 		})
 	}()
+}
+
+// RequestRename requests a rename operation. Result arrives as EventLSPRename.
+func (s *Server) RequestRename(uri DocumentURI, pos Position, newName string) {
+	if s.state != StateReady || s.capabilities.RenameProvider == nil {
+		return
+	}
+	_, ch := s.client.Call("textDocument/rename", RenameParams{
+		TextDocument: TextDocumentIdentifier{URI: uri},
+		Position:     pos,
+		NewName:      newName,
+	})
+	go func() {
+		resp := <-ch
+		if resp.Error != nil {
+			logger.Debug("lsp: rename error: %v", resp.Error)
+			return
+		}
+		if resp.Result == nil || string(resp.Result) == "null" {
+			return
+		}
+		var edit WorkspaceEdit
+		if err := json.Unmarshal(resp.Result, &edit); err != nil {
+			logger.Debug("lsp: unmarshal rename: %v", err)
+			return
+		}
+		s.bus.Send(events.Event{
+			Type:    events.EventLSPRename,
+			Payload: &RenamePayload{Edit: &edit},
+		})
+	}()
+}
+
+// RequestCodeAction requests code actions. Result arrives as EventLSPCodeAction.
+func (s *Server) RequestCodeAction(uri DocumentURI, rng Range, diagnostics []Diagnostic) {
+	if s.state != StateReady || s.capabilities.CodeActionProvider == nil {
+		return
+	}
+	_, ch := s.client.Call("textDocument/codeAction", CodeActionParams{
+		TextDocument: TextDocumentIdentifier{URI: uri},
+		Range:        rng,
+		Context:      CodeActionContext{Diagnostics: diagnostics},
+	})
+	go func() {
+		resp := <-ch
+		if resp.Error != nil {
+			logger.Debug("lsp: codeAction error: %v", resp.Error)
+			return
+		}
+		if resp.Result == nil || string(resp.Result) == "null" {
+			return
+		}
+		var actions []CodeAction
+		if err := json.Unmarshal(resp.Result, &actions); err != nil {
+			logger.Debug("lsp: unmarshal codeAction: %v", err)
+			return
+		}
+		s.bus.Send(events.Event{
+			Type:    events.EventLSPCodeAction,
+			Payload: &CodeActionPayload{Actions: actions},
+		})
+	}()
+}
+
+// RequestSignatureHelp requests signature help. Result arrives as EventLSPSignatureHelp.
+func (s *Server) RequestSignatureHelp(uri DocumentURI, pos Position) {
+	if s.state != StateReady || s.capabilities.SignatureHelpProvider == nil {
+		return
+	}
+	_, ch := s.client.Call("textDocument/signatureHelp", SignatureHelpParams{
+		TextDocument: TextDocumentIdentifier{URI: uri},
+		Position:     pos,
+	})
+	go func() {
+		resp := <-ch
+		if resp.Error != nil {
+			logger.Debug("lsp: signatureHelp error: %v", resp.Error)
+			return
+		}
+		if resp.Result == nil || string(resp.Result) == "null" {
+			return
+		}
+		var help SignatureHelp
+		if err := json.Unmarshal(resp.Result, &help); err != nil {
+			logger.Debug("lsp: unmarshal signatureHelp: %v", err)
+			return
+		}
+		if len(help.Signatures) == 0 {
+			return
+		}
+		s.bus.Send(events.Event{
+			Type: events.EventLSPSignatureHelp,
+			Payload: &SignatureHelpPayload{
+				Signatures:      help.Signatures,
+				ActiveSignature: help.ActiveSignature,
+				ActiveParameter: help.ActiveParameter,
+			},
+		})
+	}()
+}
+
+// SignatureHelpTriggerCharacters returns the server's configured signature help trigger characters.
+func (s *Server) SignatureHelpTriggerCharacters() []string {
+	if s.capabilities.SignatureHelpProvider == nil {
+		return nil
+	}
+	return s.capabilities.SignatureHelpProvider.TriggerCharacters
+}
+
+// HasRenameProvider returns true if the server supports rename.
+func (s *Server) HasRenameProvider() bool {
+	return s.capabilities.RenameProvider != nil
+}
+
+// HasCodeActionProvider returns true if the server supports code actions.
+func (s *Server) HasCodeActionProvider() bool {
+	return s.capabilities.CodeActionProvider != nil
 }
 
 // TriggerCharacters returns the server's configured completion trigger characters.

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -82,6 +83,13 @@ type App struct {
 	diagStore   *lsp.DiagnosticsStore
 	lastContent map[editor.BufferID]string // Tracks buffer content for change detection.
 	statusMsg   string                     // Temporary status message.
+
+	// Code actions.
+	codeActions     *editor.CodeActionsState
+	lspCodeActions  []lsp.CodeAction // Raw LSP code actions for applying.
+
+	// Signature help.
+	signatureHelp *editor.SignatureHelpState
 
 	// Git integration.
 	gitRepo       *gitpkg.Repo
@@ -213,6 +221,8 @@ func (a *App) Run() error {
 				a.handleGitGraphAction(ev.ActionID, ctx)
 			case actions.ModeGitDiff:
 				a.handleGitDiffAction(ev.ActionID, ctx)
+			case actions.ModeCodeActions:
+				a.handleCodeActionsAction(ev.ActionID, ctx)
 			}
 
 			// Execute any pending action (from menu item execution).
@@ -278,6 +288,21 @@ func (a *App) Run() error {
 				a.handleCompletion(p)
 			}
 
+		case events.EventLSPRename:
+			if p, ok := ev.Payload.(*lsp.RenamePayload); ok {
+				a.handleRename(p)
+			}
+
+		case events.EventLSPCodeAction:
+			if p, ok := ev.Payload.(*lsp.CodeActionPayload); ok {
+				a.handleCodeActions(p)
+			}
+
+		case events.EventLSPSignatureHelp:
+			if p, ok := ev.Payload.(*lsp.SignatureHelpPayload); ok {
+				a.handleSignatureHelp(p)
+			}
+
 		case events.EventLSPServerState:
 			// Server state change — could show in statusline in the future.
 		}
@@ -317,7 +342,8 @@ func (a *App) handleNormalAction(actionID string, ctx *actions.ActionContext) {
 	case "tree.toggle", "tab.next", "tab.prev", "tab.close", "app.quit",
 		"file.save", "tree.refresh", "edit.undo", "edit.redo",
 		"search.open", "finder.open", "completion.trigger", "palette.open", "project.search",
-		"git.status", "git.graph":
+		"git.status", "git.graph",
+		"lsp.rename", "lsp.code_action", "lsp.signature_help":
 		_ = a.registry.Execute(actionID, ctx)
 		return
 	}
@@ -396,6 +422,14 @@ func (a *App) handleNormalAction(actionID string, ctx *actions.ActionContext) {
 	if actionID == "insert.char" && a.focusArea == actions.FocusEditor {
 		if ch, ok := ctx.Event.Payload.(rune); ok {
 			a.maybeAutoTriggerCompletion(string(ch))
+			a.maybeAutoTriggerSignatureHelp(string(ch))
+		}
+	}
+
+	// Close signature help on ) or Escape.
+	if a.signatureHelp != nil && actionID == "insert.char" {
+		if ch, ok := ctx.Event.Payload.(rune); ok && ch == ')' {
+			a.signatureHelp = nil
 		}
 	}
 }
@@ -1787,5 +1821,260 @@ func (a *App) handleGitDiffAction(actionID string, ctx *actions.ActionContext) {
 		_ = a.registry.Execute("git.diff.close", ctx)
 	default:
 		// Ignore other actions in git diff mode.
+	}
+}
+
+// --- Code Actions interface ---
+
+// CodeActionsState returns the active code actions state, or nil.
+func (a *App) CodeActionsState() *editor.CodeActionsState {
+	return a.codeActions
+}
+
+// SetCodeActionsState sets the code actions state.
+func (a *App) SetCodeActionsState(ca *editor.CodeActionsState) {
+	a.codeActions = ca
+	if ca == nil {
+		a.lspCodeActions = nil
+	}
+}
+
+// ApplyCodeAction applies a code action by index.
+func (a *App) ApplyCodeAction(idx int) {
+	if idx < 0 || idx >= len(a.lspCodeActions) {
+		return
+	}
+	action := a.lspCodeActions[idx]
+	if action.Edit != nil {
+		a.applyWorkspaceEdit(action.Edit)
+	}
+	a.lspCodeActions = nil
+}
+
+// handleCodeActions processes a code action response from the LSP server.
+func (a *App) handleCodeActions(p *lsp.CodeActionPayload) {
+	if len(p.Actions) == 0 {
+		a.statusMsg = "No code actions available"
+		return
+	}
+	a.lspCodeActions = p.Actions
+	items := make([]editor.CodeActionItem, len(p.Actions))
+	for i, act := range p.Actions {
+		items[i] = editor.CodeActionItem{
+			Title: act.Title,
+			Kind:  string(act.Kind),
+			Index: i,
+		}
+	}
+	buf := a.ActiveBuffer()
+	a.codeActions = &editor.CodeActionsState{
+		Items:     items,
+		CursorRow: buf.CursorRow,
+		CursorCol: buf.CursorCol,
+	}
+	a.inputMode = actions.ModeCodeActions
+}
+
+// handleCodeActionsAction routes actions while the code actions popup is active.
+func (a *App) handleCodeActionsAction(actionID string, ctx *actions.ActionContext) {
+	switch actionID {
+	case "cursor.up":
+		_ = a.registry.Execute("code_action.up", ctx)
+	case "cursor.down":
+		_ = a.registry.Execute("code_action.down", ctx)
+	case "insert.newline":
+		_ = a.registry.Execute("code_action.execute", ctx)
+	case "input.escape":
+		_ = a.registry.Execute("code_action.dismiss", ctx)
+	default:
+		// Ignore other actions in code actions mode.
+	}
+}
+
+// --- Rename handling ---
+
+// handleRename processes a rename response from the LSP server.
+func (a *App) handleRename(p *lsp.RenamePayload) {
+	if p.Edit == nil || len(p.Edit.Changes) == 0 {
+		a.statusMsg = "Rename: no changes"
+		return
+	}
+	a.applyWorkspaceEdit(p.Edit)
+	// Count total edits across files.
+	totalEdits := 0
+	fileCount := 0
+	for _, edits := range p.Edit.Changes {
+		totalEdits += len(edits)
+		fileCount++
+	}
+	a.statusMsg = fmt.Sprintf("Renamed: %d edits in %d file(s)", totalEdits, fileCount)
+}
+
+// applyWorkspaceEdit applies a WorkspaceEdit to the relevant buffers.
+func (a *App) applyWorkspaceEdit(edit *lsp.WorkspaceEdit) {
+	if edit == nil {
+		return
+	}
+	buf := a.ActiveBuffer()
+	for uri, edits := range edit.Changes {
+		path, err := lsp.PathFromURI(uri)
+		if err != nil {
+			continue
+		}
+		// Find the buffer for this URI.
+		var targetBuf *editor.Buffer
+		for _, b := range a.buffers {
+			if b.Path == path {
+				targetBuf = b
+				break
+			}
+		}
+		if targetBuf == nil {
+			// File not open — open it and apply edits.
+			if err := a.OpenFile(path); err != nil {
+				logger.Debug("rename: failed to open %s: %v", path, err)
+				continue
+			}
+			// Find the newly opened buffer.
+			for _, b := range a.buffers {
+				if b.Path == path {
+					targetBuf = b
+					break
+				}
+			}
+			if targetBuf == nil {
+				continue
+			}
+		}
+		// Apply edits in reverse order to preserve positions.
+		for i := len(edits) - 1; i >= 0; i-- {
+			e := edits[i]
+			startLine := e.Range.Start.Line
+			startContent := ""
+			if startLine < targetBuf.Text.LineCount() {
+				startContent = targetBuf.Text.Line(startLine)
+			}
+			endLine := e.Range.End.Line
+			endContent := ""
+			if endLine < targetBuf.Text.LineCount() {
+				endContent = targetBuf.Text.Line(endLine)
+			}
+			_, startCol := lsp.LSPToEditorPosition(e.Range.Start, startContent)
+			_, endCol := lsp.LSPToEditorPosition(e.Range.End, endContent)
+
+			_ = targetBuf.Text.Delete(editor.Range{
+				Start: editor.Position{Line: startLine, Col: startCol},
+				End:   editor.Position{Line: endLine, Col: endCol},
+			})
+			if e.NewText != "" {
+				_ = targetBuf.Text.Insert(
+					editor.Position{Line: startLine, Col: startCol},
+					e.NewText,
+				)
+			}
+		}
+		targetBuf.Dirty = true
+	}
+	// Clamp cursor in active buffer.
+	buf.ClampCursor()
+}
+
+// --- Signature Help interface ---
+
+// SignatureHelpState returns the active signature help state, or nil.
+func (a *App) SignatureHelpState() *editor.SignatureHelpState {
+	return a.signatureHelp
+}
+
+// SetSignatureHelpState sets the signature help state.
+func (a *App) SetSignatureHelpState(sh *editor.SignatureHelpState) {
+	a.signatureHelp = sh
+}
+
+// handleSignatureHelp processes a signature help response.
+func (a *App) handleSignatureHelp(p *lsp.SignatureHelpPayload) {
+	if len(p.Signatures) == 0 {
+		a.signatureHelp = nil
+		return
+	}
+	sigIdx := p.ActiveSignature
+	if sigIdx >= len(p.Signatures) {
+		sigIdx = 0
+	}
+	sig := p.Signatures[sigIdx]
+	buf := a.ActiveBuffer()
+
+	params := make([]editor.SignatureParam, len(sig.Parameters))
+	for i, param := range sig.Parameters {
+		// Parameter label can be a string or [start, end] offsets.
+		var label string
+		var start, end int
+		// Try to unmarshal as string first.
+		if len(param.Label) > 0 && param.Label[0] == '"' {
+			_ = json.Unmarshal(param.Label, &label)
+			// Find the label in the signature.
+			start = strings.Index(sig.Label, label)
+			if start >= 0 {
+				end = start + len(label)
+			}
+		} else {
+			// Try as [int, int] array.
+			var offsets [2]int
+			if err := json.Unmarshal(param.Label, &offsets); err == nil {
+				start = offsets[0]
+				end = offsets[1]
+				if start >= 0 && end <= len(sig.Label) {
+					label = sig.Label[start:end]
+				}
+			}
+		}
+		params[i] = editor.SignatureParam{
+			Label: label,
+			Start: start,
+			End:   end,
+		}
+	}
+
+	a.signatureHelp = &editor.SignatureHelpState{
+		Label:           sig.Label,
+		Parameters:      params,
+		ActiveParameter: p.ActiveParameter,
+		CursorRow:       buf.CursorRow,
+		CursorCol:       buf.CursorCol,
+	}
+}
+
+// maybeAutoTriggerSignatureHelp checks if the typed character is a signature
+// help trigger and initiates signature help if so.
+func (a *App) maybeAutoTriggerSignatureHelp(ch string) {
+	buf := a.ActiveBuffer()
+	if buf.LanguageID == "" {
+		return
+	}
+	srvAny := a.LSPServer(buf.LanguageID)
+	if srvAny == nil {
+		return
+	}
+	srv, ok := srvAny.(*lsp.Server)
+	if !ok {
+		return
+	}
+	triggers := srv.SignatureHelpTriggerCharacters()
+	// Default triggers if server doesn't specify.
+	if len(triggers) == 0 {
+		triggers = []string{"(", ","}
+	}
+	for _, tc := range triggers {
+		if tc == ch {
+			uri := lsp.URIFromPath(buf.Path)
+			lineContent := buf.Text.Line(buf.CursorRow)
+			pos := lsp.EditorToLSPPosition(buf.CursorRow, buf.CursorCol, lineContent)
+			srv.RequestSignatureHelp(uri, pos)
+			return
+		}
+	}
+	// Close signature help on ')'.
+	if ch == ")" {
+		a.signatureHelp = nil
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/israelcorrea/crit-ide/internal/editor"
+	"github.com/israelcorrea/crit-ide/internal/lsp"
 )
 
 // --- Prompt: insert character ---
@@ -162,6 +163,27 @@ func (a *promptConfirm) Run(ctx *ActionContext) error {
 				ctx.App.SetInputMode(ModeNormal)
 			}
 		}
+		return nil
+	}
+
+	// Handle LSP rename prompt.
+	if p.Kind == editor.PromptLSPRename {
+		if input != "" {
+			buf := ctx.App.ActiveBuffer()
+			if buf.LanguageID != "" {
+				srvAny := ctx.App.LSPServer(buf.LanguageID)
+				if srvAny != nil {
+					if srv, ok := srvAny.(*lsp.Server); ok {
+						uri := lsp.URIFromPath(buf.Path)
+						lineContent := buf.Text.Line(buf.CursorRow)
+						pos := lsp.EditorToLSPPosition(buf.CursorRow, buf.CursorCol, lineContent)
+						srv.RequestRename(uri, pos, input)
+					}
+				}
+			}
+		}
+		ctx.App.SetPrompt(nil)
+		ctx.App.SetInputMode(ModeNormal)
 		return nil
 	}
 

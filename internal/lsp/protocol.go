@@ -143,11 +143,14 @@ type InitializeResult struct {
 
 // ServerCapabilities describes the server's capabilities.
 type ServerCapabilities struct {
-	TextDocumentSync           interface{}        `json:"textDocumentSync,omitempty"`
-	HoverProvider              bool               `json:"hoverProvider,omitempty"`
-	DefinitionProvider         bool               `json:"definitionProvider,omitempty"`
-	CompletionProvider         *CompletionOptions `json:"completionProvider,omitempty"`
-	DocumentFormattingProvider bool               `json:"documentFormattingProvider,omitempty"`
+	TextDocumentSync           interface{}           `json:"textDocumentSync,omitempty"`
+	HoverProvider              bool                  `json:"hoverProvider,omitempty"`
+	DefinitionProvider         bool                  `json:"definitionProvider,omitempty"`
+	CompletionProvider         *CompletionOptions    `json:"completionProvider,omitempty"`
+	DocumentFormattingProvider bool                  `json:"documentFormattingProvider,omitempty"`
+	RenameProvider             interface{}           `json:"renameProvider,omitempty"`  // bool or RenameOptions
+	CodeActionProvider         interface{}           `json:"codeActionProvider,omitempty"` // bool or CodeActionOptions
+	SignatureHelpProvider      *SignatureHelpOptions `json:"signatureHelpProvider,omitempty"`
 }
 
 // CompletionOptions represents completion server capabilities.
@@ -289,4 +292,100 @@ type DocumentFormattingParams struct {
 type FormattingOptions struct {
 	TabSize      int  `json:"tabSize"`
 	InsertSpaces bool `json:"insertSpaces"`
+}
+
+// --- Rename ---
+
+// RenameParams is sent for textDocument/rename.
+type RenameParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Position     Position               `json:"position"`
+	NewName      string                 `json:"newName"`
+}
+
+// WorkspaceEdit represents changes to multiple resources.
+type WorkspaceEdit struct {
+	Changes map[DocumentURI][]TextEdit `json:"changes,omitempty"`
+}
+
+// --- Code Action ---
+
+// CodeActionParams is sent for textDocument/codeAction.
+type CodeActionParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Range        Range                  `json:"range"`
+	Context      CodeActionContext      `json:"context"`
+}
+
+// CodeActionContext carries additional information about the context.
+type CodeActionContext struct {
+	Diagnostics []Diagnostic `json:"diagnostics"`
+}
+
+// CodeActionKind categorizes a code action.
+type CodeActionKind string
+
+const (
+	CodeActionQuickFix              CodeActionKind = "quickfix"
+	CodeActionRefactor              CodeActionKind = "refactor"
+	CodeActionRefactorExtract       CodeActionKind = "refactor.extract"
+	CodeActionRefactorInline        CodeActionKind = "refactor.inline"
+	CodeActionRefactorRewrite       CodeActionKind = "refactor.rewrite"
+	CodeActionSource                CodeActionKind = "source"
+	CodeActionSourceOrganizeImports CodeActionKind = "source.organizeImports"
+)
+
+// CodeAction represents a suggested edit or command.
+type CodeAction struct {
+	Title       string          `json:"title"`
+	Kind        CodeActionKind  `json:"kind,omitempty"`
+	Diagnostics []Diagnostic    `json:"diagnostics,omitempty"`
+	Edit        *WorkspaceEdit  `json:"edit,omitempty"`
+	Command     *Command        `json:"command,omitempty"`
+}
+
+// Command represents a reference to a command.
+type Command struct {
+	Title     string        `json:"title"`
+	Command   string        `json:"command"`
+	Arguments []interface{} `json:"arguments,omitempty"`
+}
+
+// CodeActionOptions describes code action server capabilities.
+type CodeActionOptions struct {
+	CodeActionKinds []CodeActionKind `json:"codeActionKinds,omitempty"`
+}
+
+// --- Signature Help ---
+
+// SignatureHelpParams is sent for textDocument/signatureHelp.
+type SignatureHelpParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Position     Position               `json:"position"`
+}
+
+// SignatureHelp represents the signature of a callable.
+type SignatureHelp struct {
+	Signatures      []SignatureInformation `json:"signatures"`
+	ActiveSignature int                    `json:"activeSignature,omitempty"`
+	ActiveParameter int                    `json:"activeParameter,omitempty"`
+}
+
+// SignatureInformation represents a single signature.
+type SignatureInformation struct {
+	Label         string                 `json:"label"`
+	Documentation json.RawMessage        `json:"documentation,omitempty"`
+	Parameters    []ParameterInformation `json:"parameters,omitempty"`
+}
+
+// ParameterInformation represents a single parameter.
+type ParameterInformation struct {
+	Label         json.RawMessage `json:"label"` // string or [int, int]
+	Documentation json.RawMessage `json:"documentation,omitempty"`
+}
+
+// SignatureHelpOptions describes signature help server capabilities.
+type SignatureHelpOptions struct {
+	TriggerCharacters   []string `json:"triggerCharacters,omitempty"`
+	RetriggerCharacters []string `json:"retriggerCharacters,omitempty"`
 }

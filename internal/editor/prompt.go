@@ -9,6 +9,7 @@ const (
 	PromptDelete                     // Confirm deletion (y/n).
 	PromptGotoLine                   // Go to a specific line number.
 	PromptGitCommit                  // Git commit message.
+	PromptLSPRename                  // LSP rename symbol.
 )
 
 // PromptState holds the state of an interactive input prompt.

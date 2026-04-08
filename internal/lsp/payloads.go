@@ -29,6 +29,23 @@ type CompletionPayload struct {
 	IsIncomplete bool
 }
 
+// RenamePayload is the event payload for rename results.
+type RenamePayload struct {
+	Edit *WorkspaceEdit
+}
+
+// CodeActionPayload is the event payload for code action results.
+type CodeActionPayload struct {
+	Actions []CodeAction
+}
+
+// SignatureHelpPayload is the event payload for signature help results.
+type SignatureHelpPayload struct {
+	Signatures      []SignatureInformation
+	ActiveSignature int
+	ActiveParameter int
+}
+
 // ServerStatePayload is the event payload for server state changes.
 type ServerStatePayload struct {
 	LangID string

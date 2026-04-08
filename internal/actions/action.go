@@ -22,6 +22,7 @@ const (
 	ModeGitStatus                    // Git status panel is active.
 	ModeGitGraph                     // Git graph panel is active.
 	ModeGitDiff                      // Git diff viewer is active.
+	ModeCodeActions                  // Code actions popup is active.
 )
 
 // FocusArea indicates which panel currently has keyboard focus.
@@ -147,6 +148,15 @@ type AppState interface {
 	// Git diff.
 	GitDiffState() *editor.GitDiffState
 	SetGitDiffState(gd *editor.GitDiffState)
+
+	// Code actions.
+	CodeActionsState() *editor.CodeActionsState
+	SetCodeActionsState(ca *editor.CodeActionsState)
+	ApplyCodeAction(idx int) // Apply code action by index in the original LSP list.
+
+	// Signature help.
+	SignatureHelpState() *editor.SignatureHelpState
+	SetSignatureHelpState(sh *editor.SignatureHelpState)
 }
 
 // ActionContext carries everything an action needs to execute.

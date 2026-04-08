@@ -109,6 +109,15 @@ func (m *mockApp) SetGitGraphState(gg *editor.GitGraphState)    {}
 func (m *mockApp) GitDiffState() *editor.GitDiffState          { return nil }
 func (m *mockApp) SetGitDiffState(gd *editor.GitDiffState)      {}
 
+// Code actions stubs.
+func (m *mockApp) CodeActionsState() *editor.CodeActionsState        { return nil }
+func (m *mockApp) SetCodeActionsState(ca *editor.CodeActionsState)   {}
+func (m *mockApp) ApplyCodeAction(idx int)                           {}
+
+// Signature help stubs.
+func (m *mockApp) SignatureHelpState() *editor.SignatureHelpState     { return nil }
+func (m *mockApp) SetSignatureHelpState(sh *editor.SignatureHelpState) {}
+
 func newTestContext(app *mockApp, actionID string, payload any) *ActionContext {
 	return &ActionContext{
 		App: app,

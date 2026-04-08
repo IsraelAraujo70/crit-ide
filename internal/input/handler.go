@@ -230,10 +230,19 @@ func (h *Handler) handleKey(ev *tcell.EventKey) {
 		}
 	}
 
+	// Ctrl+. for code actions.
+	if ev.Modifiers()&tcell.ModCtrl != 0 && ev.Key() == tcell.KeyRune && ev.Rune() == '.' {
+		h.bus.Send(events.Event{Type: events.EventAction, ActionID: "lsp.code_action"})
+		return
+	}
+
 	// Function keys.
 	switch ev.Key() {
 	case tcell.KeyF1:
 		h.bus.Send(events.Event{Type: events.EventAction, ActionID: "palette.open"})
+		return
+	case tcell.KeyF2:
+		h.bus.Send(events.Event{Type: events.EventAction, ActionID: "lsp.rename"})
 		return
 	case tcell.KeyF3:
 		if ev.Modifiers()&tcell.ModShift != 0 {
