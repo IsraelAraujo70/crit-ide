@@ -13,6 +13,7 @@ import (
 	"github.com/israelcorrea/crit-ide/internal/events"
 	"github.com/israelcorrea/crit-ide/internal/filetree"
 	"github.com/israelcorrea/crit-ide/internal/fuzzy"
+	gitpkg "github.com/israelcorrea/crit-ide/internal/git"
 	"github.com/israelcorrea/crit-ide/internal/highlight"
 	"github.com/israelcorrea/crit-ide/internal/input"
 	"github.com/israelcorrea/crit-ide/internal/logger"
@@ -81,6 +82,13 @@ type App struct {
 	diagStore   *lsp.DiagnosticsStore
 	lastContent map[editor.BufferID]string // Tracks buffer content for change detection.
 	statusMsg   string                     // Temporary status message.
+
+	// Git integration.
+	gitRepo       *gitpkg.Repo
+	gitStatus     *editor.GitStatusState
+	gitGraph      *editor.GitGraphState
+	gitDiff       *editor.GitDiffState
+	gitGutterInfo []gitpkg.LineDiffInfo // Cached gutter diff for current buffer.
 }
 
 // New creates a new App. If filePath is non-empty, that file will be opened.
@@ -126,7 +134,7 @@ func (a *App) Run() error {
 	// Initialize clipboard.
 	a.clip = &clipboard.SystemClipboard{}
 
-	// Register all actions.
+	// Register all actions (including git actions via RegisterAll).
 	actions.RegisterAll(a.registry)
 	actions.RegisterLSPActions(a.registry)
 
@@ -148,6 +156,9 @@ func (a *App) Run() error {
 
 	// Initialize file tree from current working directory or file's directory.
 	a.initFileTree()
+
+	// Initialize Git repo.
+	a.gitRepo = gitpkg.NewRepo(a.ProjectRoot())
 
 	// Initialize fuzzy file finder cache.
 	a.fileFinder = fuzzy.NewFileFinder(a.ProjectRoot())
@@ -196,6 +207,12 @@ func (a *App) Run() error {
 				a.handlePaletteAction(ev.ActionID, ctx)
 			case actions.ModeProjectSearch:
 				a.handleProjectSearchAction(ev.ActionID, ctx)
+			case actions.ModeGitStatus:
+				a.handleGitStatusAction(ev.ActionID, ctx)
+			case actions.ModeGitGraph:
+				a.handleGitGraphAction(ev.ActionID, ctx)
+			case actions.ModeGitDiff:
+				a.handleGitDiffAction(ev.ActionID, ctx)
 			}
 
 			// Execute any pending action (from menu item execution).
@@ -219,9 +236,10 @@ func (a *App) Run() error {
 				a.lastHighlightContent = content
 			}
 
-			// If save action, notify LSP.
+			// If save action, notify LSP and refresh git gutter.
 			if ev.ActionID == "file.save" {
 				a.notifyLSPSave()
+				a.refreshGitGutter()
 			}
 
 		case events.EventResize:
@@ -295,7 +313,8 @@ func (a *App) handleNormalAction(actionID string, ctx *actions.ActionContext) {
 	switch actionID {
 	case "tree.toggle", "tab.next", "tab.prev", "tab.close", "app.quit",
 		"file.save", "tree.refresh", "edit.undo", "edit.redo",
-		"search.open", "finder.open", "completion.trigger", "palette.open", "project.search":
+		"search.open", "finder.open", "completion.trigger", "palette.open", "project.search",
+		"git.status", "git.graph":
 		_ = a.registry.Execute(actionID, ctx)
 		return
 	}
@@ -499,6 +518,30 @@ func (a *App) render() {
 	}
 	if a.projectSearch != nil {
 		vs.ProjectSearch = a.projectSearch
+	}
+	if a.gitStatus != nil {
+		vs.GitStatus = a.gitStatus
+	}
+	if a.gitGraph != nil {
+		vs.GitGraph = a.gitGraph
+	}
+	if a.gitDiff != nil {
+		vs.GitDiff = a.gitDiff
+	}
+
+	// Set git branch for statusline.
+	if a.gitRepo != nil {
+		vs.GitBranch = a.gitRepo.CurrentBranch()
+	}
+
+	// Set git gutter info for current buffer.
+	if len(a.gitGutterInfo) > 0 {
+		for _, info := range a.gitGutterInfo {
+			vs.GitGutter = append(vs.GitGutter, render.GutterDiffInfo{
+				Line:   info.Line,
+				Status: int(info.Status),
+			})
+		}
 	}
 
 	// Build tab info.
@@ -943,6 +986,22 @@ func (a *App) SwitchBuffer(idx int) {
 			a.highlighter.SetLanguage("")
 			a.lastHighlightContent = ""
 		}
+		// Refresh git gutter for the new buffer.
+		a.refreshGitGutter()
+	}
+}
+
+// refreshGitGutter refreshes the gutter diff info for the current buffer.
+func (a *App) refreshGitGutter() {
+	if a.gitRepo == nil {
+		a.gitGutterInfo = nil
+		return
+	}
+	buf := a.ActiveBuffer()
+	if buf.Path != "" {
+		a.gitGutterInfo = a.gitRepo.DiffForGutter(buf.Path)
+	} else {
+		a.gitGutterInfo = nil
 	}
 }
 
@@ -1543,4 +1602,185 @@ func (a *App) handleFormat(p *lsp.FormatPayload) {
 	buf.Dirty = true
 	buf.ClampCursor()
 	a.statusMsg = "Formatted"
+}
+
+// --- Git integration interface ---
+
+// GitStatusState returns the active git status panel state, or nil.
+func (a *App) GitStatusState() *editor.GitStatusState {
+	return a.gitStatus
+}
+
+// SetGitStatusState sets or clears the git status panel state.
+func (a *App) SetGitStatusState(gs *editor.GitStatusState) {
+	a.gitStatus = gs
+}
+
+// GitGraphState returns the active git graph state, or nil.
+func (a *App) GitGraphState() *editor.GitGraphState {
+	return a.gitGraph
+}
+
+// SetGitGraphState sets or clears the git graph state.
+func (a *App) SetGitGraphState(gg *editor.GitGraphState) {
+	a.gitGraph = gg
+}
+
+// GitDiffState returns the active git diff state, or nil.
+func (a *App) GitDiffState() *editor.GitDiffState {
+	return a.gitDiff
+}
+
+// SetGitDiffState sets or clears the git diff state.
+func (a *App) SetGitDiffState(gd *editor.GitDiffState) {
+	a.gitDiff = gd
+}
+
+// GitStatusEntries returns the current git file status entries.
+func (a *App) GitStatusEntries() []editor.GitStatusEntry {
+	if a.gitRepo == nil {
+		return nil
+	}
+	statuses := a.gitRepo.Status()
+	entries := make([]editor.GitStatusEntry, len(statuses))
+	for i, s := range statuses {
+		entries[i] = editor.GitStatusEntry{
+			Path:   s.Path,
+			Status: string(s.Status),
+			Staged: s.Staged,
+		}
+	}
+	return entries
+}
+
+// GitCurrentBranch returns the current git branch name.
+func (a *App) GitCurrentBranch() string {
+	if a.gitRepo == nil {
+		return ""
+	}
+	return a.gitRepo.CurrentBranch()
+}
+
+// GitStage stages a file.
+func (a *App) GitStage(path string) error {
+	if a.gitRepo == nil {
+		return fmt.Errorf("not a git repository")
+	}
+	return a.gitRepo.Stage(path)
+}
+
+// GitUnstage unstages a file.
+func (a *App) GitUnstage(path string) error {
+	if a.gitRepo == nil {
+		return fmt.Errorf("not a git repository")
+	}
+	return a.gitRepo.Unstage(path)
+}
+
+// GitCommit creates a new commit.
+func (a *App) GitCommit(msg string) error {
+	if a.gitRepo == nil {
+		return fmt.Errorf("not a git repository")
+	}
+	return a.gitRepo.Commit(msg)
+}
+
+// GitDiff returns the unstaged diff for a file.
+func (a *App) GitDiff(path string) string {
+	if a.gitRepo == nil {
+		return ""
+	}
+	return a.gitRepo.Diff(path)
+}
+
+// GitDiffStaged returns the staged diff for a file.
+func (a *App) GitDiffStaged(path string) string {
+	if a.gitRepo == nil {
+		return ""
+	}
+	return a.gitRepo.DiffStaged(path)
+}
+
+// GitGraphLines returns the git graph lines for display.
+func (a *App) GitGraphLines() []editor.GitGraphLine {
+	if a.gitRepo == nil {
+		return nil
+	}
+	rawLines := a.gitRepo.GraphLog(100)
+	lines := make([]editor.GitGraphLine, len(rawLines))
+	for i, raw := range rawLines {
+		lines[i] = editor.GitGraphLine{
+			Text: raw,
+		}
+	}
+	return lines
+}
+
+// GitRefreshStatus refreshes the cached git status and gutter info.
+func (a *App) GitRefreshStatus() {
+	if a.gitRepo == nil {
+		return
+	}
+	// Refresh gutter info for current buffer.
+	buf := a.ActiveBuffer()
+	if buf.Path != "" {
+		a.gitGutterInfo = a.gitRepo.DiffForGutter(buf.Path)
+	}
+}
+
+// --- Git mode handlers ---
+
+// handleGitStatusAction routes actions while the git status panel is active.
+func (a *App) handleGitStatusAction(actionID string, ctx *actions.ActionContext) {
+	switch actionID {
+	case "cursor.up":
+		_ = a.registry.Execute("git.status.up", ctx)
+	case "cursor.down":
+		_ = a.registry.Execute("git.status.down", ctx)
+	case "input.escape":
+		_ = a.registry.Execute("git.status.close", ctx)
+	case "insert.newline":
+		_ = a.registry.Execute("git.status.enter", ctx)
+	case "insert.char":
+		if ch, ok := ctx.Event.Payload.(rune); ok {
+			switch ch {
+			case 's':
+				_ = a.registry.Execute("git.stage", ctx)
+			case 'd':
+				_ = a.registry.Execute("git.diff", ctx)
+			case 'c':
+				_ = a.registry.Execute("git.commit", ctx)
+			}
+		}
+	default:
+		// Ignore other actions in git status mode.
+	}
+}
+
+// handleGitGraphAction routes actions while the git graph panel is active.
+func (a *App) handleGitGraphAction(actionID string, ctx *actions.ActionContext) {
+	switch actionID {
+	case "cursor.up":
+		_ = a.registry.Execute("git.graph.up", ctx)
+	case "cursor.down":
+		_ = a.registry.Execute("git.graph.down", ctx)
+	case "input.escape":
+		_ = a.registry.Execute("git.graph.close", ctx)
+	default:
+		// Ignore other actions in git graph mode.
+	}
+}
+
+// handleGitDiffAction routes actions while the git diff viewer is active.
+func (a *App) handleGitDiffAction(actionID string, ctx *actions.ActionContext) {
+	switch actionID {
+	case "cursor.up", "scroll.up":
+		_ = a.registry.Execute("git.diff.up", ctx)
+	case "cursor.down", "scroll.down":
+		_ = a.registry.Execute("git.diff.down", ctx)
+	case "input.escape":
+		_ = a.registry.Execute("git.diff.close", ctx)
+	default:
+		// Ignore other actions in git diff mode.
+	}
 }

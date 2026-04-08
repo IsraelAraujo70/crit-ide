@@ -35,6 +35,12 @@ type DiagnosticRange struct {
 	Severity int // 1=Error, 2=Warning, 3=Info, 4=Hint.
 }
 
+// GutterDiffInfo represents a per-line Git diff indicator.
+type GutterDiffInfo struct {
+	Line   int // Zero-based line number.
+	Status int // 0=added, 1=modified (context), 2=removed.
+}
+
 // ViewState contains everything the renderer needs to draw a frame.
 // It decouples rendering from the app package.
 type ViewState struct {
@@ -83,6 +89,21 @@ type ViewState struct {
 	StatusMsg    string // Optional message to show in statusline.
 	DiagErrors   int    // Error count for statusline.
 	DiagWarnings int    // Warning count for statusline.
+
+	// Git status panel.
+	GitStatus    *editor.GitStatusState  // Non-nil when git status panel is active.
+
+	// Git graph panel.
+	GitGraph     *editor.GitGraphState   // Non-nil when git graph is active.
+
+	// Git diff viewer.
+	GitDiff      *editor.GitDiffState    // Non-nil when git diff viewer is active.
+
+	// Git gutter info for current buffer.
+	GitGutter    []GutterDiffInfo
+
+	// Git branch for statusline.
+	GitBranch    string
 }
 
 // Renderer draws the editor state to a tcell screen.
@@ -177,6 +198,9 @@ func (r *Renderer) Render(vs *ViewState) {
 	searchCurrentStyle := tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(tcell.NewRGBColor(255, 140, 50)).Bold(true)
 	searchMatchMap := r.buildSearchMatchMap(vs.Search, vs.ScrollY, vs.ScrollY+editorHeight)
 
+	// Build git gutter map for visible lines.
+	gitGutterMap := r.buildGitGutterMap(vs.GitGutter)
+
 	for row := 0; row < editorHeight; row++ {
 		screenRow := contentStartY + row
 		lineIdx := vs.ScrollY + row
@@ -193,6 +217,20 @@ func (r *Renderer) Render(vs *ViewState) {
 			gs = th.GutterActive
 		}
 		r.drawString(0, screenRow, lineNum, gs)
+
+		// Draw git gutter indicator (colored bar in the leftmost column).
+		if gitStatus, ok := gitGutterMap[lineIdx]; ok {
+			var gitGutterStyle tcell.Style
+			switch gitStatus {
+			case 0: // Added.
+				gitGutterStyle = tcell.StyleDefault.Foreground(tcell.NewRGBColor(80, 200, 80))
+			case 1: // Modified (context = both added and removed).
+				gitGutterStyle = tcell.StyleDefault.Foreground(tcell.NewRGBColor(220, 180, 50))
+			case 2: // Removed.
+				gitGutterStyle = tcell.StyleDefault.Foreground(tcell.NewRGBColor(220, 60, 60))
+			}
+			r.screen.SetContent(0, screenRow, '▎', nil, gitGutterStyle)
+		}
 
 		// Compute selection byte range for this line.
 		lineSelStart := -1
@@ -314,7 +352,9 @@ func (r *Renderer) Render(vs *ViewState) {
 	}
 
 	// --- Position the terminal cursor ---
-	if vs.ProjectSearch != nil {
+	if vs.GitStatus != nil || vs.GitGraph != nil || vs.GitDiff != nil {
+		r.screen.HideCursor()
+	} else if vs.ProjectSearch != nil {
 		// Cursor is drawn inside the project search popup.
 		r.screen.HideCursor()
 	} else if vs.Finder != nil {
@@ -360,6 +400,21 @@ func (r *Renderer) Render(vs *ViewState) {
 	// --- Draw project search panel if active ---
 	if vs.ProjectSearch != nil {
 		r.renderProjectSearch(vs.ProjectSearch, vs.Width, vs.Height)
+	}
+
+	// --- Draw git status panel if active ---
+	if vs.GitStatus != nil {
+		r.renderGitStatus(vs.GitStatus, vs.Width, vs.Height)
+	}
+
+	// --- Draw git graph panel if active ---
+	if vs.GitGraph != nil {
+		r.renderGitGraph(vs.GitGraph, vs.Width, vs.Height)
+	}
+
+	// --- Draw git diff viewer if active ---
+	if vs.GitDiff != nil {
+		r.renderGitDiff(vs.GitDiff, vs.Width, vs.Height)
 	}
 
 	// --- Draw completion popup if active ---
@@ -583,8 +638,21 @@ func (r *Renderer) drawStatusline(vs *ViewState, y int, gutterWidth int, th *the
 	if vs.Buffer.LanguageID != "" {
 		langInfo = " [" + vs.Buffer.LanguageID + "]"
 	}
-	left := fmt.Sprintf(" %s%s%s", name, dirty, langInfo)
+	branchInfo := ""
+	if vs.GitBranch != "" {
+		branchInfo = "  " + vs.GitBranch
+	}
+	left := fmt.Sprintf(" %s%s%s%s", name, dirty, langInfo, branchInfo)
 	r.drawString(0, y, left, statusStyle)
+
+	// Draw branch with special style if present.
+	if vs.GitBranch != "" {
+		branchStyle := tcell.StyleDefault.
+			Foreground(tcell.NewRGBColor(120, 200, 255)).
+			Background(tcell.NewRGBColor(30, 30, 50))
+		branchStart := len(fmt.Sprintf(" %s%s%s ", name, dirty, langInfo))
+		r.drawString(branchStart, y, " "+vs.GitBranch, branchStyle)
+	}
 
 	// Diagnostic counts after filename.
 	diagX := len(left) + 2

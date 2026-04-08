@@ -101,6 +101,14 @@ func (m *mockApp) SetProjectSearchState(ps *editor.ProjectSearchState) {}
 func (m *mockApp) RunProjectSearch(query string)                       {}
 func (m *mockApp) ProjectRoot() string                                 { return "/tmp" }
 
+// Git stubs.
+func (m *mockApp) GitStatusState() *editor.GitStatusState      { return nil }
+func (m *mockApp) SetGitStatusState(gs *editor.GitStatusState)  {}
+func (m *mockApp) GitGraphState() *editor.GitGraphState        { return nil }
+func (m *mockApp) SetGitGraphState(gg *editor.GitGraphState)    {}
+func (m *mockApp) GitDiffState() *editor.GitDiffState          { return nil }
+func (m *mockApp) SetGitDiffState(gd *editor.GitDiffState)      {}
+
 func newTestContext(app *mockApp, actionID string, payload any) *ActionContext {
 	return &ActionContext{
 		App: app,

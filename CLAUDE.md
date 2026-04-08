@@ -35,10 +35,11 @@ events    → nothing (types + channel)
 clipboard → atotto/clipboard (external only)
 filetree  → nothing (os, path/filepath, sort, strings)
 search    → nothing (os/exec, bufio, regexp, strconv, strings, path/filepath)
+git       → nothing (os/exec, bufio, strings, time, path/filepath)
 actions   → editor, events
 input     → events, tcell
 render    → editor, tcell
-app       → all of the above (including filetree)
+app       → all of the above (including filetree, git)
 ```
 
 **Never create circular imports.** Actions access app state through the `AppState` interface, not by importing the `app` package.
@@ -143,15 +144,16 @@ docs/
 - **Find/Replace** (Ctrl+F) with incremental search, match highlighting, next/prev navigation, replace one/all
 - **Fuzzy File Finder** (Ctrl+P) — Telescope-style popup with score-based fuzzy matching, match highlighting, .gitignore support, file cache
 - **Project Search** (Ctrl+Shift+F / F5) — project-wide grep/ripgrep search, results grouped by file, navigate to match
-- 90+ registered actions (cursor, edit, file, scroll, mouse, clipboard, selection, context menu, file tree, tabs, undo, word-movement, LSP, search, finder, completion, project search)
+- **Git integration** — full Git status panel (Ctrl+Shift+G), git graph (F6), diff viewer, stage/unstage, commit from IDE, branch in statusline, gutter indicators (green/yellow/red)
+- 100+ registered actions (cursor, edit, file, scroll, mouse, clipboard, selection, context menu, file tree, tabs, undo, word-movement, LSP, search, finder, completion, project search, git)
 - Mouse: click, double-click, drag-select, wheel scroll, right-click context menu, tab click, tree click
 - Clipboard: Ctrl+C/X/V, system clipboard via atotto/clipboard
 - Tab management: Ctrl+W close, Ctrl+PgDn/PgUp switch, mouse click tabs
 - File tree: keyboard navigation (arrows, Enter), expand/collapse dirs, click to open, create/rename/delete
-- Focus routing: editor vs file tree, with smart action remapping
+- Focus routing: editor vs file tree vs git panel, with smart action remapping
 - Hardcoded keymap (configurable keymap engine planned)
 - Full redraw rendering (diff rendering planned)
-- No splits, no Git integration, no AI yet
+- No splits, no AI yet
 
 ## Roadmap
 

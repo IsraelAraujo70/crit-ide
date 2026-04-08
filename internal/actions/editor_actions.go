@@ -299,4 +299,7 @@ func RegisterAll(r *Registry) {
 
 	// Project search (F5 / Ctrl+Shift+F).
 	RegisterProjectSearchActions(r)
+
+	// Git actions (Ctrl+Shift+G / F6).
+	RegisterGitActions(r)
 }

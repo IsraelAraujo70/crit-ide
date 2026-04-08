@@ -19,6 +19,9 @@ const (
 	ModeCompletion                   // Autocomplete popup is active.
 	ModeCommandPalette               // Command palette popup is active.
 	ModeProjectSearch                // Project-wide search panel is active.
+	ModeGitStatus                    // Git status panel is active.
+	ModeGitGraph                     // Git graph panel is active.
+	ModeGitDiff                      // Git diff viewer is active.
 )
 
 // FocusArea indicates which panel currently has keyboard focus.
@@ -27,6 +30,7 @@ type FocusArea int
 const (
 	FocusEditor   FocusArea = iota // Editor pane has focus.
 	FocusFileTree                  // File tree panel has focus.
+	FocusGitPanel                  // Git status/graph panel has focus.
 )
 
 // ClipboardProvider abstracts clipboard read/write for actions.
@@ -131,6 +135,18 @@ type AppState interface {
 	SetProjectSearchState(ps *editor.ProjectSearchState)
 	RunProjectSearch(query string)
 	ProjectRoot() string
+
+	// Git status.
+	GitStatusState() *editor.GitStatusState
+	SetGitStatusState(gs *editor.GitStatusState)
+
+	// Git graph.
+	GitGraphState() *editor.GitGraphState
+	SetGitGraphState(gg *editor.GitGraphState)
+
+	// Git diff.
+	GitDiffState() *editor.GitDiffState
+	SetGitDiffState(gd *editor.GitDiffState)
 }
 
 // ActionContext carries everything an action needs to execute.

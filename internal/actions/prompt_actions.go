@@ -123,7 +123,13 @@ type promptCancel struct{}
 func (a *promptCancel) ID() string { return "prompt.cancel" }
 
 func (a *promptCancel) Run(ctx *ActionContext) error {
+	p := ctx.App.Prompt()
 	ctx.App.SetPrompt(nil)
+	// If we were in a git commit prompt, return to git status.
+	if p != nil && p.Kind == editor.PromptGitCommit && ctx.App.GitStatusState() != nil {
+		ctx.App.SetInputMode(ModeGitStatus)
+		return nil
+	}
 	ctx.App.SetInputMode(ModeNormal)
 	return nil
 }
@@ -141,6 +147,23 @@ func (a *promptConfirm) Run(ctx *ActionContext) error {
 	}
 
 	input := strings.TrimSpace(p.Input)
+
+	// Handle git commit prompt.
+	if p.Kind == editor.PromptGitCommit {
+		if input != "" {
+			// Keep prompt with the input so git.commit.execute can read it.
+			ctx.App.PostAction("git.commit.execute")
+		} else {
+			ctx.App.SetPrompt(nil)
+			ctx.App.SetStatusMessage("Commit cancelled: empty message")
+			if ctx.App.GitStatusState() != nil {
+				ctx.App.SetInputMode(ModeGitStatus)
+			} else {
+				ctx.App.SetInputMode(ModeNormal)
+			}
+		}
+		return nil
+	}
 
 	// Handle goto-line prompt (does not require file tree).
 	if p.Kind == editor.PromptGotoLine {

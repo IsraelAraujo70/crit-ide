@@ -8,6 +8,7 @@ const (
 	PromptRename                     // Rename a file or directory.
 	PromptDelete                     // Confirm deletion (y/n).
 	PromptGotoLine                   // Go to a specific line number.
+	PromptGitCommit                  // Git commit message.
 )
 
 // PromptState holds the state of an interactive input prompt.

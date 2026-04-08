@@ -149,14 +149,18 @@
     },
     {
       "name": "Git",
-      "status": "planned",
-      "summary": "Git integration with status panel and diff viewer",
+      "status": "done",
+      "summary": "Git integration with status panel, graph, diff viewer, and gutter indicators",
       "deliverables": [
-        { "item": "Git status panel (staged, unstaged, untracked)", "status": "planned" },
-        { "item": "Diff viewer (inline + side-by-side)", "status": "planned" },
-        { "item": "Stage/unstage file and hunk", "status": "planned" },
-        { "item": "Basic commit from IDE", "status": "planned" },
-        { "item": "Branch display in statusline", "status": "planned" }
+        { "item": "Git status panel (staged, unstaged, untracked) — Ctrl+Shift+G toggle, s:stage/unstage, d:diff, c:commit, Enter:open", "status": "done" },
+        { "item": "Diff viewer (inline unified diff with color-coded +/- lines)", "status": "done" },
+        { "item": "Stage/unstage file from status panel", "status": "done" },
+        { "item": "Basic commit from IDE (prompt for commit message)", "status": "done" },
+        { "item": "Branch display in statusline", "status": "done" },
+        { "item": "Git graph (F6) — visual log with branch colors, scroll navigation", "status": "done" },
+        { "item": "Gutter indicators (green:added, yellow:modified, red:deleted)", "status": "done" },
+        { "item": "FocusGitPanel in focus system", "status": "done" },
+        { "item": "Git output parsing tests", "status": "done" }
       ]
     },
     {
