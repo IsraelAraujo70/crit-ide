@@ -12,6 +12,7 @@ import (
 	"github.com/israelcorrea/crit-ide/internal/editor"
 	"github.com/israelcorrea/crit-ide/internal/events"
 	"github.com/israelcorrea/crit-ide/internal/filetree"
+	"github.com/israelcorrea/crit-ide/internal/fuzzy"
 	"github.com/israelcorrea/crit-ide/internal/highlight"
 	"github.com/israelcorrea/crit-ide/internal/input"
 	"github.com/israelcorrea/crit-ide/internal/logger"
@@ -54,6 +55,13 @@ type App struct {
 
 	// Search state.
 	search *editor.SearchState
+
+	// File finder.
+	finder     *editor.FinderState
+	fileFinder *fuzzy.FileFinder
+
+	// Completion.
+	completion *editor.CompletionState
 
 	// Syntax highlighting.
 	highlighter          *highlight.TreeSitterHighlighter
@@ -134,6 +142,9 @@ func (a *App) Run() error {
 	// Initialize file tree from current working directory or file's directory.
 	a.initFileTree()
 
+	// Initialize fuzzy file finder cache.
+	a.fileFinder = fuzzy.NewFileFinder(a.projectRoot())
+
 	// Initialize LSP manager.
 	rootPath := a.projectRoot()
 	a.lspManager = lsp.NewManager(a.bus, rootPath)
@@ -170,6 +181,10 @@ func (a *App) Run() error {
 				a.handlePromptAction(ev.ActionID, ctx)
 			case actions.ModeSearch:
 				a.handleSearchAction(ev.ActionID, ctx)
+			case actions.ModeFileFinder:
+				a.handleFinderAction(ev.ActionID, ctx)
+			case actions.ModeCompletion:
+				a.handleCompletionAction(ev.ActionID, ctx)
 			}
 
 			// Execute any pending action (from menu item execution).
@@ -226,6 +241,11 @@ func (a *App) Run() error {
 				a.handleFormat(p)
 			}
 
+		case events.EventLSPCompletion:
+			if p, ok := ev.Payload.(*lsp.CompletionPayload); ok {
+				a.handleCompletion(p)
+			}
+
 		case events.EventLSPServerState:
 			// Server state change — could show in statusline in the future.
 		}
@@ -264,7 +284,7 @@ func (a *App) handleNormalAction(actionID string, ctx *actions.ActionContext) {
 	switch actionID {
 	case "tree.toggle", "tab.next", "tab.prev", "tab.close", "app.quit",
 		"file.save", "tree.refresh", "edit.undo", "edit.redo",
-		"search.open":
+		"search.open", "finder.open", "completion.trigger":
 		_ = a.registry.Execute(actionID, ctx)
 		return
 	}
@@ -338,6 +358,13 @@ func (a *App) handleNormalAction(actionID string, ctx *actions.ActionContext) {
 
 	// Default: execute in editor context.
 	_ = a.registry.Execute(actionID, ctx)
+
+	// After inserting a character in normal mode, check for auto-trigger.
+	if actionID == "insert.char" && a.focusArea == actions.FocusEditor {
+		if ch, ok := ctx.Event.Payload.(rune); ok {
+			a.maybeAutoTriggerCompletion(string(ch))
+		}
+	}
 }
 
 // routeMouseClick determines which panel was clicked and dispatches accordingly.
@@ -449,6 +476,12 @@ func (a *App) render() {
 	}
 	if a.search != nil {
 		vs.Search = a.search
+	}
+	if a.finder != nil {
+		vs.Finder = a.finder
+	}
+	if a.completion != nil {
+		vs.Completion = a.completion
 	}
 
 	// Build tab info.
@@ -623,6 +656,28 @@ func (a *App) handleSearchAction(actionID string, ctx *actions.ActionContext) {
 	}
 
 	// Ignore all other actions while search is open.
+}
+
+// handleFinderAction routes actions while the fuzzy file finder is active.
+func (a *App) handleFinderAction(actionID string, ctx *actions.ActionContext) {
+	remap := map[string]string{
+		"insert.char":     "finder.char",
+		"delete.backward": "finder.backspace",
+		"delete.forward":  "finder.delete",
+		"cursor.left":     "finder.left",
+		"cursor.right":    "finder.right",
+		"cursor.home":     "finder.home",
+		"cursor.end":      "finder.end",
+		"cursor.up":       "finder.up",
+		"cursor.down":     "finder.down",
+		"input.escape":    "finder.close",
+		"insert.newline":  "finder.confirm",
+	}
+	if mapped, ok := remap[actionID]; ok {
+		_ = a.registry.Execute(mapped, ctx)
+		return
+	}
+	// Ignore all other actions while finder is open.
 }
 
 // scrollY returns the scroll offset for the active buffer.
@@ -896,6 +951,266 @@ func (a *App) SearchState() *editor.SearchState {
 // SetSearchState sets or clears the search state.
 func (a *App) SetSearchState(s *editor.SearchState) {
 	a.search = s
+}
+
+// --- File finder interface ---
+
+// FinderState returns the active finder state, or nil.
+func (a *App) FinderState() *editor.FinderState {
+	return a.finder
+}
+
+// SetFinderState sets or clears the finder state.
+func (a *App) SetFinderState(f *editor.FinderState) {
+	a.finder = f
+}
+
+// FinderFilter returns fuzzy-filtered file results for the given pattern.
+func (a *App) FinderFilter(pattern string) []editor.FinderResult {
+	if a.fileFinder == nil {
+		return nil
+	}
+	fResults := a.fileFinder.Filter(pattern)
+	results := make([]editor.FinderResult, len(fResults))
+	for i, fr := range fResults {
+		results[i] = editor.FinderResult{
+			RelPath: fr.RelPath,
+			AbsPath: fr.AbsPath,
+			Matches: fr.Matches,
+		}
+	}
+	return results
+}
+
+// FinderRebuildCache rebuilds the file finder cache (called on tree.refresh).
+func (a *App) FinderRebuildCache() {
+	if a.fileFinder != nil {
+		a.fileFinder.Rebuild()
+	}
+}
+
+// FinderFileCount returns the total number of indexed files.
+func (a *App) FinderFileCount() int {
+	if a.fileFinder != nil {
+		return a.fileFinder.FileCount()
+	}
+	return 0
+}
+
+// --- Completion interface ---
+
+// CompletionState returns the active completion state, or nil.
+func (a *App) CompletionState() *editor.CompletionState {
+	return a.completion
+}
+
+// SetCompletionState sets or clears the completion state.
+func (a *App) SetCompletionState(c *editor.CompletionState) {
+	a.completion = c
+}
+
+// TriggerCompletion initiates an LSP completion request.
+func (a *App) TriggerCompletion(triggerChar string) {
+	buf := a.ActiveBuffer()
+	if buf.LanguageID == "" {
+		return
+	}
+	srvAny := a.LSPServer(buf.LanguageID)
+	if srvAny == nil {
+		return
+	}
+	srv, ok := srvAny.(*lsp.Server)
+	if !ok || srv.TriggerCharacters() == nil && triggerChar != "" {
+		// If server has no completion support at all, skip auto-trigger.
+		// Manual trigger (triggerChar == "") still proceeds.
+	}
+
+	uri := lsp.URIFromPath(buf.Path)
+	lineContent := buf.Text.Line(buf.CursorRow)
+	pos := lsp.EditorToLSPPosition(buf.CursorRow, buf.CursorCol, lineContent)
+
+	triggerKind := lsp.CompletionTriggerInvoked
+	if triggerChar != "" {
+		triggerKind = lsp.CompletionTriggerTriggerCharacter
+	}
+	srv.Completion(uri, pos, triggerKind, triggerChar)
+}
+
+// handleCompletion processes completion results from LSP.
+func (a *App) handleCompletion(p *lsp.CompletionPayload) {
+	if len(p.Items) == 0 {
+		return
+	}
+
+	buf := a.ActiveBuffer()
+
+	// Convert LSP items to editor items.
+	items := make([]editor.CompletionItem, len(p.Items))
+	for i, lspItem := range p.Items {
+		items[i] = editor.CompletionItem{
+			Label:      lspItem.Label,
+			Kind:       editor.CompletionItemKind(lspItem.Kind),
+			Detail:     lspItem.Detail,
+			InsertText: lspItem.InsertText,
+			FilterText: lspItem.FilterText,
+			SortText:   lspItem.SortText,
+		}
+	}
+
+	// Calculate anchor position: find the start of the word being typed.
+	anchorRow := buf.CursorRow
+	anchorCol := buf.CursorCol
+	line := buf.Text.Line(anchorRow)
+
+	// Walk backwards to find the start of the identifier.
+	for anchorCol > 0 {
+		if anchorCol > len(line) {
+			anchorCol = len(line)
+		}
+		ch := line[anchorCol-1]
+		if isIdentChar(ch) {
+			anchorCol--
+		} else {
+			break
+		}
+	}
+
+	prefix := ""
+	if anchorCol < buf.CursorCol && anchorCol < len(line) {
+		prefix = line[anchorCol:buf.CursorCol]
+	}
+
+	a.completion = editor.NewCompletionState(items, anchorRow, anchorCol, prefix)
+
+	// If no items match after filtering, don't show popup.
+	if a.completion.IsEmpty() {
+		a.completion = nil
+		return
+	}
+
+	a.inputMode = actions.ModeCompletion
+}
+
+// handleCompletionAction routes actions while the completion popup is active.
+func (a *App) handleCompletionAction(actionID string, ctx *actions.ActionContext) {
+	switch actionID {
+	case "completion.trigger":
+		// Re-trigger while already completing — just request fresh items.
+		a.TriggerCompletion("")
+		return
+
+	case "cursor.up":
+		_ = a.registry.Execute("completion.up", ctx)
+		return
+
+	case "cursor.down":
+		_ = a.registry.Execute("completion.down", ctx)
+		return
+
+	case "insert.newline", "edit.indent":
+		// Accept completion on Enter or Tab.
+		_ = a.registry.Execute("completion.accept", ctx)
+		return
+
+	case "input.escape":
+		_ = a.registry.Execute("completion.dismiss", ctx)
+		return
+
+	case "insert.char":
+		// First insert the character normally.
+		_ = a.registry.Execute(actionID, ctx)
+
+		// Then refilter the completion list.
+		if a.completion != nil {
+			buf := a.ActiveBuffer()
+			line := buf.Text.Line(buf.CursorRow)
+			// Recalculate prefix from anchor to current cursor.
+			if buf.CursorRow == a.completion.AnchorRow && buf.CursorCol >= a.completion.AnchorCol {
+				newPrefix := ""
+				if a.completion.AnchorCol < len(line) && buf.CursorCol <= len(line) {
+					newPrefix = line[a.completion.AnchorCol:buf.CursorCol]
+				}
+				a.completion.UpdatePrefix(newPrefix)
+				if a.completion.IsEmpty() {
+					a.completion = nil
+					a.inputMode = actions.ModeNormal
+				}
+			} else {
+				// Cursor moved to different line — dismiss.
+				a.completion = nil
+				a.inputMode = actions.ModeNormal
+			}
+		}
+
+		// Check if the typed character is a trigger character for auto-completion.
+		if a.completion == nil {
+			if ch, ok := ctx.Event.Payload.(rune); ok {
+				a.maybeAutoTriggerCompletion(string(ch))
+			}
+		}
+		return
+
+	case "delete.backward":
+		_ = a.registry.Execute(actionID, ctx)
+
+		// Refilter after backspace.
+		if a.completion != nil {
+			buf := a.ActiveBuffer()
+			if buf.CursorRow == a.completion.AnchorRow && buf.CursorCol >= a.completion.AnchorCol {
+				line := buf.Text.Line(buf.CursorRow)
+				newPrefix := ""
+				if a.completion.AnchorCol < len(line) && buf.CursorCol <= len(line) {
+					newPrefix = line[a.completion.AnchorCol:buf.CursorCol]
+				}
+				a.completion.UpdatePrefix(newPrefix)
+				if a.completion.IsEmpty() {
+					a.completion = nil
+					a.inputMode = actions.ModeNormal
+				}
+			} else {
+				// Backspaced before anchor — dismiss.
+				a.completion = nil
+				a.inputMode = actions.ModeNormal
+			}
+		}
+		return
+
+	default:
+		// Any other action: dismiss completion and process normally.
+		a.completion = nil
+		a.inputMode = actions.ModeNormal
+		a.handleNormalAction(actionID, ctx)
+		return
+	}
+}
+
+// maybeAutoTriggerCompletion checks if the typed character is a trigger character
+// and initiates completion if so.
+func (a *App) maybeAutoTriggerCompletion(ch string) {
+	buf := a.ActiveBuffer()
+	if buf.LanguageID == "" {
+		return
+	}
+	srvAny := a.LSPServer(buf.LanguageID)
+	if srvAny == nil {
+		return
+	}
+	srv, ok := srvAny.(*lsp.Server)
+	if !ok {
+		return
+	}
+	triggers := srv.TriggerCharacters()
+	for _, tc := range triggers {
+		if tc == ch {
+			a.TriggerCompletion(ch)
+			return
+		}
+	}
+}
+
+// isIdentChar returns true if the byte is a valid identifier character.
+func isIdentChar(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || b == '_'
 }
 
 // --- LSP support interface ---

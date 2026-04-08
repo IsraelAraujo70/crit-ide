@@ -99,7 +99,10 @@
         { "item": "Format document (Ctrl+L)", "status": "done" },
         { "item": "didOpen / didChange / didSave / didClose notifications", "status": "done" },
         { "item": "LSP position ↔ editor byte offset conversion", "status": "done" },
-        { "item": "Error/warning count in statusline", "status": "done" }
+        { "item": "Error/warning count in statusline", "status": "done" },
+        { "item": "Autocomplete (Ctrl+Space / auto-trigger on trigger chars)", "status": "done" },
+        { "item": "Completion popup with kind icons, detail, scroll, prefix filtering", "status": "done" },
+        { "item": "ModeCompletion input routing (Up/Down/Enter/Tab/Escape/typing)", "status": "done" }
       ]
     },
     {
@@ -114,7 +117,8 @@
         { "item": "Double-click word selection", "status": "done" },
         { "item": "SelectWord action for programmatic word selection", "status": "done" },
         { "item": "Block indent/dedent selection (Tab/Shift+Tab)", "status": "done" },
-        { "item": "Find/Replace (Ctrl+F) with match highlighting, next/prev, replace one/all", "status": "done" }
+        { "item": "Find/Replace (Ctrl+F) with match highlighting, next/prev, replace one/all", "status": "done" },
+        { "item": "Fuzzy File Finder (Ctrl+P) — Telescope-style popup, score-based fuzzy matching, .gitignore, file cache", "status": "done" }
       ]
     },
     {
@@ -139,7 +143,7 @@
         { "item": "Context-aware keybinding resolution", "status": "planned" },
         { "item": "Chord/leader key support", "status": "planned" },
         { "item": "Command palette popup", "status": "planned" },
-        { "item": "Fuzzy file finder", "status": "planned" }
+        { "item": "Fuzzy file finder", "status": "done" }
       ]
     },
     {
@@ -202,7 +206,10 @@
     "search.open", "search.close", "search.char", "search.backspace", "search.delete",
     "search.left", "search.right", "search.home", "search.end",
     "search.next", "search.prev", "search.toggle_replace",
-    "search.replace", "search.replace_all"
+    "search.replace", "search.replace_all",
+    "finder.open", "finder.close", "finder.char", "finder.backspace", "finder.delete",
+    "finder.left", "finder.right", "finder.home", "finder.end",
+    "finder.up", "finder.down", "finder.confirm"
   ],
   "keybindings": {
     "Arrow Up/Down/Left/Right": "cursor movement (or tree nav when tree focused)",
@@ -238,7 +245,11 @@
     "Enter (in search find)": "search.next — find next match",
     "Enter (in search replace)": "search.replace — replace current match",
     "Ctrl+A (in search)": "search.replace_all — replace all matches",
-    "Escape": "input.escape / tree.focus.editor / prompt.cancel / search.close",
+    "Ctrl+P": "finder.open — open fuzzy file finder",
+    "Enter (in finder)": "finder.confirm — open selected file",
+    "Up/Down (in finder)": "finder.up/down — navigate results",
+    "Escape (in finder)": "finder.close — close finder",
+    "Escape": "input.escape / tree.focus.editor / prompt.cancel / search.close / finder.close",
     "Left click": "mouse.click / tab.click / tree.click (auto-routed by position)",
     "Double click": "select.word — select word under cursor",
     "Left drag": "mouse.drag",

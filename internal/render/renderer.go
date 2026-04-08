@@ -62,6 +62,12 @@ type ViewState struct {
 	// Search state.
 	Search        *editor.SearchState  // Non-nil when find/replace is active.
 
+	// File finder.
+	Finder        *editor.FinderState  // Non-nil when fuzzy file finder is active.
+
+	// Completion popup.
+	Completion    *editor.CompletionState // Non-nil when autocomplete popup is active.
+
 	// Syntax highlighting.
 	Highlighter  highlight.Highlighter
 	Theme        *theme.Theme
@@ -302,7 +308,10 @@ func (r *Renderer) Render(vs *ViewState) {
 	}
 
 	// --- Position the terminal cursor ---
-	if vs.Search != nil {
+	if vs.Finder != nil {
+		// Cursor is drawn inside the finder popup.
+		r.screen.HideCursor()
+	} else if vs.Search != nil {
 		// Show cursor inside the search bar's active field.
 		var cursorX int
 		if vs.Search.ActiveField == editor.FieldFind {
@@ -327,6 +336,17 @@ func (r *Renderer) Render(vs *ViewState) {
 		} else {
 			r.screen.HideCursor()
 		}
+	}
+
+	// --- Draw file finder popup if active ---
+	if vs.Finder != nil {
+		r.renderFinder(vs.Finder, vs.Width, vs.Height)
+	}
+
+	// --- Draw completion popup if active ---
+	if vs.Completion != nil && !vs.Completion.IsEmpty() {
+		gutterW := r.gutterWidth(vs.Buffer.Text.LineCount())
+		r.renderCompletion(vs, gutterW, contentStartY, editorHeight)
 	}
 
 	// --- Draw popup menu on top if active ---
@@ -753,6 +773,238 @@ func (r *Renderer) buildSearchMatchMap(search *editor.SearchState, minLine, maxL
 	return m
 }
 
+// renderFinder draws the centered fuzzy file finder popup.
+func (r *Renderer) renderFinder(fs *editor.FinderState, screenW, screenH int) {
+	// Popup dimensions.
+	popupWidth := screenW * 2 / 3
+	if popupWidth < 40 {
+		popupWidth = 40
+	}
+	if popupWidth > screenW-4 {
+		popupWidth = screenW - 4
+	}
+
+	maxVisible := 15
+	popupHeight := maxVisible + 4 // borders (2) + input row (1) + header/separator (1)
+	if popupHeight > screenH-2 {
+		popupHeight = screenH - 2
+		maxVisible = popupHeight - 4
+		if maxVisible < 1 {
+			maxVisible = 1
+		}
+	}
+
+	// Center the popup.
+	px := (screenW - popupWidth) / 2
+	py := (screenH - popupHeight) / 4 // Slight bias toward top.
+	if py < 1 {
+		py = 1
+	}
+
+	// Styles.
+	borderStyle := tcell.StyleDefault.
+		Foreground(tcell.NewRGBColor(80, 140, 255)).
+		Background(tcell.NewRGBColor(20, 20, 30))
+	headerStyle := tcell.StyleDefault.
+		Foreground(tcell.NewRGBColor(120, 160, 220)).
+		Background(tcell.NewRGBColor(20, 20, 30))
+	inputBg := tcell.StyleDefault.
+		Foreground(tcell.ColorWhite).
+		Background(tcell.NewRGBColor(30, 30, 45))
+	inputLabelStyle := tcell.StyleDefault.
+		Foreground(tcell.NewRGBColor(80, 180, 255)).
+		Background(tcell.NewRGBColor(30, 30, 45)).
+		Bold(true)
+	resultStyle := tcell.StyleDefault.
+		Foreground(tcell.NewRGBColor(200, 200, 200)).
+		Background(tcell.NewRGBColor(20, 20, 30))
+	selectedStyle := tcell.StyleDefault.
+		Foreground(tcell.ColorWhite).
+		Background(tcell.NewRGBColor(40, 60, 100)).
+		Bold(true)
+	matchCharStyle := tcell.StyleDefault.
+		Foreground(tcell.NewRGBColor(255, 200, 80)).
+		Background(tcell.NewRGBColor(20, 20, 30)).
+		Bold(true)
+	matchCharSelectedStyle := tcell.StyleDefault.
+		Foreground(tcell.NewRGBColor(255, 220, 100)).
+		Background(tcell.NewRGBColor(40, 60, 100)).
+		Bold(true)
+	emptyStyle := tcell.StyleDefault.
+		Foreground(tcell.NewRGBColor(100, 100, 100)).
+		Background(tcell.NewRGBColor(20, 20, 30))
+
+	// Draw top border.
+	r.screen.SetContent(px, py, tcell.RuneULCorner, nil, borderStyle)
+	title := " Open File "
+	titleStart := (popupWidth - len(title)) / 2
+	for x := 1; x < popupWidth-1; x++ {
+		ch := tcell.RuneHLine
+		style := borderStyle
+		if x >= titleStart && x < titleStart+len(title) {
+			ch = rune(title[x-titleStart])
+			style = headerStyle
+		}
+		r.screen.SetContent(px+x, py, ch, nil, style)
+	}
+	r.screen.SetContent(px+popupWidth-1, py, tcell.RuneURCorner, nil, borderStyle)
+
+	// Draw input row (py+1).
+	inputRow := py + 1
+	r.screen.SetContent(px, inputRow, tcell.RuneVLine, nil, borderStyle)
+
+	// Fill input row background.
+	for x := 1; x < popupWidth-1; x++ {
+		r.screen.SetContent(px+x, inputRow, ' ', nil, inputBg)
+	}
+
+	// Draw search icon and input.
+	label := " > "
+	cx := px + 1
+	for _, ch := range label {
+		r.screen.SetContent(cx, inputRow, ch, nil, inputLabelStyle)
+		cx++
+	}
+
+	// Draw query text.
+	cursorScreenX := cx
+	qRunes := []rune(fs.Query)
+	qBytePos := 0
+	for _, ch := range qRunes {
+		if qBytePos == fs.CursorPos {
+			cursorScreenX = cx
+		}
+		if cx >= px+popupWidth-1 {
+			break
+		}
+		r.screen.SetContent(cx, inputRow, ch, nil, inputBg)
+		cx++
+		qBytePos += len(string(ch))
+	}
+	if qBytePos == fs.CursorPos {
+		cursorScreenX = cx
+	}
+
+	// Show cursor inside finder input.
+	r.screen.ShowCursor(cursorScreenX, inputRow)
+
+	// Draw result count on the right of the input row.
+	countStr := fmt.Sprintf("%d/%d ", fs.ResultCount(), fs.TotalFiles)
+	countX := px + popupWidth - 1 - len(countStr)
+	if countX > cx+1 {
+		for _, ch := range countStr {
+			r.screen.SetContent(countX, inputRow, ch, nil, tcell.StyleDefault.
+				Foreground(tcell.NewRGBColor(100, 130, 170)).
+				Background(tcell.NewRGBColor(30, 30, 45)))
+			countX++
+		}
+	}
+
+	r.screen.SetContent(px+popupWidth-1, inputRow, tcell.RuneVLine, nil, borderStyle)
+
+	// Draw separator between input and results (py+2).
+	sepRow := py + 2
+	r.screen.SetContent(px, sepRow, tcell.RuneLTee, nil, borderStyle)
+	for x := 1; x < popupWidth-1; x++ {
+		r.screen.SetContent(px+x, sepRow, tcell.RuneHLine, nil, borderStyle)
+	}
+	r.screen.SetContent(px+popupWidth-1, sepRow, tcell.RuneRTee, nil, borderStyle)
+
+	// Draw results.
+	contentWidth := popupWidth - 2
+	for row := 0; row < maxVisible; row++ {
+		screenRow := py + 3 + row
+		resultIdx := fs.ScrollY + row
+
+		r.screen.SetContent(px, screenRow, tcell.RuneVLine, nil, borderStyle)
+
+		if resultIdx >= len(fs.Results) {
+			// Empty row.
+			for x := 0; x < contentWidth; x++ {
+				r.screen.SetContent(px+1+x, screenRow, ' ', nil, resultStyle)
+			}
+		} else {
+			result := fs.Results[resultIdx]
+			isSelected := resultIdx == fs.SelectedIdx
+
+			baseStyle := resultStyle
+			highlightStyle := matchCharStyle
+			if isSelected {
+				baseStyle = selectedStyle
+				highlightStyle = matchCharSelectedStyle
+			}
+
+			// Build a set of matched character indices for quick lookup.
+			matchSet := make(map[int]bool, len(result.Matches))
+			for _, m := range result.Matches {
+				matchSet[m] = true
+			}
+
+			// Draw the path with match highlighting.
+			runes := []rune(result.RelPath)
+			x := 0
+
+			// Leading space.
+			r.screen.SetContent(px+1, screenRow, ' ', nil, baseStyle)
+			x++
+
+			for ci, ch := range runes {
+				if x >= contentWidth {
+					break
+				}
+				style := baseStyle
+				if matchSet[ci] {
+					style = highlightStyle
+				}
+				r.screen.SetContent(px+1+x, screenRow, ch, nil, style)
+				x++
+			}
+
+			// Fill remaining space.
+			for x < contentWidth {
+				r.screen.SetContent(px+1+x, screenRow, ' ', nil, baseStyle)
+				x++
+			}
+		}
+
+		r.screen.SetContent(px+popupWidth-1, screenRow, tcell.RuneVLine, nil, borderStyle)
+	}
+
+	// Draw empty state message if no results.
+	if len(fs.Results) == 0 && fs.Query != "" {
+		msgRow := py + 3
+		msg := "No matching files"
+		msgStart := (contentWidth - len(msg)) / 2
+		if msgStart < 1 {
+			msgStart = 1
+		}
+		for i, ch := range msg {
+			if msgStart+i < contentWidth {
+				r.screen.SetContent(px+1+msgStart+i, msgRow, ch, nil, emptyStyle)
+			}
+		}
+	}
+
+	// Draw bottom border.
+	bottomRow := py + 3 + maxVisible
+	r.screen.SetContent(px, bottomRow, tcell.RuneLLCorner, nil, borderStyle)
+	for x := 1; x < popupWidth-1; x++ {
+		r.screen.SetContent(px+x, bottomRow, tcell.RuneHLine, nil, borderStyle)
+	}
+	r.screen.SetContent(px+popupWidth-1, bottomRow, tcell.RuneLRCorner, nil, borderStyle)
+
+	// Hint line inside the bottom border.
+	hint := " Enter:Open  Esc:Close  Up/Down:Navigate "
+	hintStart := (popupWidth - len(hint)) / 2
+	if hintStart > 1 {
+		for i, ch := range hint {
+			r.screen.SetContent(px+hintStart+i, bottomRow, ch, nil, tcell.StyleDefault.
+				Foreground(tcell.NewRGBColor(100, 120, 160)).
+				Background(tcell.NewRGBColor(20, 20, 30)))
+		}
+	}
+}
+
 // drawSearchBar renders the Find/Replace bar (replaces statusline when active).
 func (r *Renderer) drawSearchBar(s *editor.SearchState, y, width int) {
 	labelStyle := tcell.StyleDefault.
@@ -839,4 +1091,191 @@ func (r *Renderer) drawSearchBar(s *editor.SearchState, y, width int) {
 			r.drawString(rx, y, hints, countStyle)
 		}
 	}
+}
+
+// renderCompletion draws the autocomplete popup below (or above) the cursor.
+func (r *Renderer) renderCompletion(vs *ViewState, gutterWidth, contentStartY, editorHeight int) {
+	cs := vs.Completion
+	visible := cs.VisibleItems()
+	if len(visible) == 0 {
+		return
+	}
+
+	// Styles.
+	borderStyle := tcell.StyleDefault.
+		Foreground(tcell.NewRGBColor(80, 100, 140)).
+		Background(tcell.NewRGBColor(25, 25, 35))
+	itemStyle := tcell.StyleDefault.
+		Foreground(tcell.NewRGBColor(200, 200, 200)).
+		Background(tcell.NewRGBColor(30, 30, 45))
+	selectedStyle := tcell.StyleDefault.
+		Foreground(tcell.ColorWhite).
+		Background(tcell.NewRGBColor(50, 60, 90)).
+		Bold(true)
+	kindStyle := tcell.StyleDefault.
+		Foreground(tcell.NewRGBColor(130, 170, 230)).
+		Background(tcell.NewRGBColor(30, 30, 45))
+	kindSelectedStyle := tcell.StyleDefault.
+		Foreground(tcell.NewRGBColor(160, 200, 255)).
+		Background(tcell.NewRGBColor(50, 60, 90)).
+		Bold(true)
+	detailStyle := tcell.StyleDefault.
+		Foreground(tcell.NewRGBColor(130, 130, 150)).
+		Background(tcell.NewRGBColor(30, 30, 45))
+	detailSelectedStyle := tcell.StyleDefault.
+		Foreground(tcell.NewRGBColor(160, 160, 180)).
+		Background(tcell.NewRGBColor(50, 60, 90))
+
+	// Calculate popup dimensions.
+	maxLabelLen := 0
+	maxDetailLen := 0
+	for _, item := range visible {
+		if len(item.Label) > maxLabelLen {
+			maxLabelLen = len(item.Label)
+		}
+		if len(item.Detail) > maxDetailLen {
+			maxDetailLen = len(item.Detail)
+		}
+	}
+
+	// Popup width: " kk label   detail "
+	// kindWidth=2, padding=5 (spaces around), label, optional detail.
+	kindWidth := 2
+	popupWidth := kindWidth + 1 + maxLabelLen + 2 // " kk label "
+	if maxDetailLen > 0 {
+		detailWidth := maxDetailLen
+		if detailWidth > 30 {
+			detailWidth = 30 // Limit detail width.
+		}
+		popupWidth += detailWidth + 1
+	}
+	if popupWidth < 20 {
+		popupWidth = 20
+	}
+	if popupWidth > vs.Width-gutterWidth-2 {
+		popupWidth = vs.Width - gutterWidth - 2
+	}
+
+	popupHeight := len(visible)
+
+	// Position: below the cursor line, aligned to anchor column.
+	cursorScreenRow := cs.AnchorRow - vs.ScrollY + contentStartY
+	cursorScreenCol := gutterWidth + r.visualCol(vs.Buffer, cs.AnchorCol)
+
+	// Try below cursor.
+	py := cursorScreenRow + 1
+	if py+popupHeight > contentStartY+editorHeight {
+		// Try above cursor.
+		py = cursorScreenRow - popupHeight
+		if py < contentStartY {
+			py = contentStartY
+		}
+	}
+
+	px := cursorScreenCol
+	if px+popupWidth > vs.Width {
+		px = vs.Width - popupWidth
+	}
+	if px < 0 {
+		px = 0
+	}
+
+	selIdx := cs.VisibleSelectedIdx()
+
+	// Draw each item.
+	for row, item := range visible {
+		screenRow := py + row
+		isSelected := row == selIdx
+
+		baseStyle := itemStyle
+		kStyle := kindStyle
+		dStyle := detailStyle
+		if isSelected {
+			baseStyle = selectedStyle
+			kStyle = kindSelectedStyle
+			dStyle = detailSelectedStyle
+		}
+
+		x := px
+
+		// Draw kind icon.
+		icon := item.KindIcon()
+		for _, ch := range icon {
+			if x < vs.Width {
+				r.screen.SetContent(x, screenRow, ch, nil, kStyle)
+				x++
+			}
+		}
+
+		// Space after kind.
+		if x < vs.Width {
+			r.screen.SetContent(x, screenRow, ' ', nil, baseStyle)
+			x++
+		}
+
+		// Draw label.
+		labelRunes := []rune(item.Label)
+		for _, ch := range labelRunes {
+			if x >= px+popupWidth {
+				break
+			}
+			r.screen.SetContent(x, screenRow, ch, nil, baseStyle)
+			x++
+		}
+
+		// Pad after label.
+		labelEnd := px + kindWidth + 1 + maxLabelLen + 1
+		for x < labelEnd && x < px+popupWidth {
+			r.screen.SetContent(x, screenRow, ' ', nil, baseStyle)
+			x++
+		}
+
+		// Draw detail if space allows.
+		if item.Detail != "" && x < px+popupWidth-1 {
+			detailRunes := []rune(item.Detail)
+			for _, ch := range detailRunes {
+				if x >= px+popupWidth {
+					break
+				}
+				r.screen.SetContent(x, screenRow, ch, nil, dStyle)
+				x++
+			}
+		}
+
+		// Fill remaining width.
+		for x < px+popupWidth {
+			r.screen.SetContent(x, screenRow, ' ', nil, baseStyle)
+			x++
+		}
+	}
+
+	// Draw scroll indicator if there are more items.
+	if len(cs.Filtered) > editor.CompletionMaxVisible {
+		total := len(cs.Filtered)
+		scrollFraction := fmt.Sprintf("%d/%d", cs.SelectedIdx+1, total)
+		indicatorX := px + popupWidth - len(scrollFraction) - 1
+		if indicatorX > px {
+			for _, ch := range scrollFraction {
+				r.screen.SetContent(indicatorX, py, ch, nil, borderStyle)
+				indicatorX++
+			}
+		}
+	}
+}
+
+// visualCol computes the visual column (accounting for tabs) for a given byte offset.
+func (r *Renderer) visualCol(buf *editor.Buffer, byteCol int) int {
+	line := buf.Text.Line(buf.CursorRow)
+	col := 0
+	for i, ch := range line {
+		if i >= byteCol {
+			break
+		}
+		if ch == '\t' {
+			col += 4 - (col % 4)
+		} else {
+			col++
+		}
+	}
+	return col
 }

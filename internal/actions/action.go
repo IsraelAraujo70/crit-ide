@@ -15,6 +15,8 @@ const (
 	ModeContextMenu                  // Context menu is open.
 	ModePrompt                       // Input prompt is active.
 	ModeSearch                       // Find/Replace bar is active.
+	ModeFileFinder                   // Fuzzy file finder popup is active.
+	ModeCompletion                   // Autocomplete popup is active.
 )
 
 // FocusArea indicates which panel currently has keyboard focus.
@@ -105,6 +107,18 @@ type AppState interface {
 	// Search.
 	SearchState() *editor.SearchState
 	SetSearchState(s *editor.SearchState)
+
+	// File finder.
+	FinderState() *editor.FinderState
+	SetFinderState(f *editor.FinderState)
+	FinderFilter(pattern string) []editor.FinderResult
+	FinderRebuildCache()
+	FinderFileCount() int
+
+	// Completion.
+	CompletionState() *editor.CompletionState
+	SetCompletionState(c *editor.CompletionState)
+	TriggerCompletion(triggerChar string)
 }
 
 // ActionContext carries everything an action needs to execute.

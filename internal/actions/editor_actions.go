@@ -284,4 +284,10 @@ func RegisterAll(r *Registry) {
 	r.Register(&searchToggleReplace{})
 	r.Register(&searchReplace{})
 	r.Register(&searchReplaceAll{})
+
+	// File finder (Ctrl+P).
+	RegisterFinderActions(r)
+
+	// Completion (Ctrl+Space / auto-trigger).
+	RegisterCompletionActions(r)
 }

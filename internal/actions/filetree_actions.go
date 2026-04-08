@@ -162,5 +162,7 @@ func (a *treeRefresh) Run(ctx *ActionContext) error {
 		return nil
 	}
 	ft.Refresh()
+	// Also rebuild the fuzzy file finder cache.
+	ctx.App.FinderRebuildCache()
 	return nil
 }

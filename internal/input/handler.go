@@ -142,6 +142,12 @@ func (h *Handler) handleMouse(ev *tcell.EventMouse) {
 // handleKey translates a tcell key event into an action event.
 // Hardcoded keymap. Will be replaced by a configurable keymap engine.
 func (h *Handler) handleKey(ev *tcell.EventKey) {
+	// Ctrl+Space (NUL) for manual completion trigger.
+	if ev.Key() == tcell.KeyNUL || (ev.Key() == tcell.KeyRune && ev.Rune() == ' ' && ev.Modifiers()&tcell.ModCtrl != 0) {
+		h.bus.Send(events.Event{Type: events.EventAction, ActionID: "completion.trigger"})
+		return
+	}
+
 	// Check for modifier+key combinations first.
 	if ev.Modifiers()&tcell.ModCtrl != 0 {
 		switch ev.Key() {
@@ -189,6 +195,9 @@ func (h *Handler) handleKey(ev *tcell.EventKey) {
 			return
 		case tcell.KeyCtrlF:
 			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "search.open"})
+			return
+		case tcell.KeyCtrlP:
+			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "finder.open"})
 			return
 		}
 	}

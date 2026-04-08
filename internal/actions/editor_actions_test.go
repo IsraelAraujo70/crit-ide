@@ -79,6 +79,18 @@ func (m *mockApp) NavigateToPosition(path string, line, col int) {}
 func (m *mockApp) SearchState() *editor.SearchState      { return m.search }
 func (m *mockApp) SetSearchState(s *editor.SearchState)   { m.search = s }
 
+// File finder stubs.
+func (m *mockApp) FinderState() *editor.FinderState                  { return nil }
+func (m *mockApp) SetFinderState(f *editor.FinderState)              {}
+func (m *mockApp) FinderFilter(pattern string) []editor.FinderResult { return nil }
+func (m *mockApp) FinderRebuildCache()                               {}
+func (m *mockApp) FinderFileCount() int                              { return 0 }
+
+// Completion stubs.
+func (m *mockApp) CompletionState() *editor.CompletionState    { return nil }
+func (m *mockApp) SetCompletionState(c *editor.CompletionState) {}
+func (m *mockApp) TriggerCompletion(triggerChar string)         {}
+
 func newTestContext(app *mockApp, actionID string, payload any) *ActionContext {
 	return &ActionContext{
 		App: app,
