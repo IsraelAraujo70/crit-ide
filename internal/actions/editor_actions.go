@@ -266,6 +266,9 @@ func RegisterAll(r *Registry) {
 	r.Register(&indentSelection{})
 	r.Register(&dedentSelection{})
 
+	// Go to line.
+	r.Register(&gotoLine{})
+
 	// Word selection.
 	r.Register(&selectWord{})
 

@@ -1,6 +1,7 @@
 package actions
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/israelcorrea/crit-ide/internal/editor"
@@ -139,14 +140,43 @@ func (a *promptConfirm) Run(ctx *ActionContext) error {
 		return nil
 	}
 
+	input := strings.TrimSpace(p.Input)
+
+	// Handle goto-line prompt (does not require file tree).
+	if p.Kind == editor.PromptGotoLine {
+		if input != "" {
+			lineNum, err := strconv.Atoi(input)
+			if err == nil {
+				buf := ctx.App.ActiveBuffer()
+				// Convert 1-indexed user input to 0-indexed internal row.
+				row := lineNum - 1
+				if row < 0 {
+					row = 0
+				}
+				maxRow := buf.Text.LineCount() - 1
+				if maxRow < 0 {
+					maxRow = 0
+				}
+				if row > maxRow {
+					row = maxRow
+				}
+				buf.CursorRow = row
+				buf.CursorCol = 0
+				buf.ClampCursor()
+				ctx.App.NavigateToPosition(buf.Path, row, 0)
+			}
+		}
+		ctx.App.SetPrompt(nil)
+		ctx.App.SetInputMode(ModeNormal)
+		return nil
+	}
+
 	ft := ctx.App.FileTree()
 	if ft == nil {
 		ctx.App.SetPrompt(nil)
 		ctx.App.SetInputMode(ModeNormal)
 		return nil
 	}
-
-	input := strings.TrimSpace(p.Input)
 
 	switch p.Kind {
 	case editor.PromptNewFile:

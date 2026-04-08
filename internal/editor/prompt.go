@@ -4,9 +4,10 @@ package editor
 type PromptKind int
 
 const (
-	PromptNewFile PromptKind = iota // Create a new file or directory.
-	PromptRename                    // Rename a file or directory.
-	PromptDelete                    // Confirm deletion (y/n).
+	PromptNewFile  PromptKind = iota // Create a new file or directory.
+	PromptRename                     // Rename a file or directory.
+	PromptDelete                     // Confirm deletion (y/n).
+	PromptGotoLine                   // Go to a specific line number.
 )
 
 // PromptState holds the state of an interactive input prompt.

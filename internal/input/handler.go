@@ -179,7 +179,7 @@ func (h *Handler) handleKey(ev *tcell.EventKey) {
 			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "lsp.hover"})
 			return
 		case tcell.KeyCtrlG:
-			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "lsp.definition"})
+			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "goto.line"})
 			return
 		case tcell.KeyCtrlL:
 			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "lsp.format"})

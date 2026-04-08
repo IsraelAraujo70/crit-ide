@@ -137,7 +137,8 @@ docs/
 - **Auto-indent** on Enter (copies leading whitespace)
 - **Double-click** to select word
 - **Syntax highlighting** via tree-sitter (14 languages: Go, Python, JS, TS, Rust, C, CSS, HTML, JSON, MD, TOML, YAML, Bash)
-- **LSP integration** — diagnostics (inline underline), hover (Ctrl+K), go-to-definition (Ctrl+G/F12), format (Ctrl+L), **autocomplete** (Ctrl+Space / auto-trigger on `.` etc.)
+- **LSP integration** — diagnostics (inline underline), hover (Ctrl+K), go-to-definition (F12), format (Ctrl+L), **autocomplete** (Ctrl+Space / auto-trigger on `.` etc.)
+- **Go to Line** (Ctrl+G) — opens prompt for line number, navigates to target line
 - File tree panel (NeoTree-style) on the right side with toggle (Ctrl+B)
 - **Find/Replace** (Ctrl+F) with incremental search, match highlighting, next/prev navigation, replace one/all
 - **Fuzzy File Finder** (Ctrl+P) — Telescope-style popup with score-based fuzzy matching, match highlighting, .gitignore support, file cache
