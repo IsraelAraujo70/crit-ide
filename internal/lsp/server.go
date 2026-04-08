@@ -101,6 +101,9 @@ func (s *Server) Initialize() error {
 				Hover: &HoverClientCapabilities{
 					ContentFormat: []string{"plaintext", "markdown"},
 				},
+				Completion: &CompletionClientCapabilities{
+					DynamicRegistration: false,
+				},
 				PublishDiagnostics: &PublishDiagnosticsClientCapabilities{
 					VersionSupport: true,
 				},
@@ -131,9 +134,9 @@ func (s *Server) Initialize() error {
 
 	s.state = StateReady
 	s.notifyState("")
-	logger.Info("lsp: %s initialized (hover=%v, definition=%v, format=%v)",
+	logger.Info("lsp: %s initialized (hover=%v, definition=%v, format=%v, completion=%v)",
 		s.langID, s.capabilities.HoverProvider, s.capabilities.DefinitionProvider,
-		s.capabilities.DocumentFormattingProvider)
+		s.capabilities.DocumentFormattingProvider, s.capabilities.CompletionProvider != nil)
 	return nil
 }
 
@@ -297,6 +300,57 @@ func (s *Server) Format(uri DocumentURI) {
 			Payload: &FormatPayload{URI: uri, Edits: edits},
 		})
 	}()
+}
+
+// Completion requests completion items. Result arrives as EventLSPCompletion.
+func (s *Server) Completion(uri DocumentURI, pos Position, triggerKind CompletionTriggerKind, triggerChar string) {
+	if s.state != StateReady || s.capabilities.CompletionProvider == nil {
+		return
+	}
+	params := CompletionParams{
+		TextDocument: TextDocumentIdentifier{URI: uri},
+		Position:     pos,
+	}
+	if triggerKind != 0 {
+		params.Context = &CompletionContext{
+			TriggerKind:      triggerKind,
+			TriggerCharacter: triggerChar,
+		}
+	}
+	_, ch := s.client.Call("textDocument/completion", params)
+	go func() {
+		resp := <-ch
+		if resp.Error != nil {
+			logger.Debug("lsp: completion error: %v", resp.Error)
+			return
+		}
+		if resp.Result == nil || string(resp.Result) == "null" {
+			return
+		}
+		// Completion can return CompletionList or []CompletionItem.
+		var list CompletionList
+		if err := json.Unmarshal(resp.Result, &list); err != nil {
+			// Try []CompletionItem directly.
+			var items []CompletionItem
+			if err2 := json.Unmarshal(resp.Result, &items); err2 != nil {
+				logger.Debug("lsp: unmarshal completion: %v / %v", err, err2)
+				return
+			}
+			list.Items = items
+		}
+		s.bus.Send(events.Event{
+			Type:    events.EventLSPCompletion,
+			Payload: &CompletionPayload{Items: list.Items, IsIncomplete: list.IsIncomplete},
+		})
+	}()
+}
+
+// TriggerCharacters returns the server's configured completion trigger characters.
+func (s *Server) TriggerCharacters() []string {
+	if s.capabilities.CompletionProvider == nil {
+		return nil
+	}
+	return s.capabilities.CompletionProvider.TriggerCharacters
 }
 
 // handleNotification processes server notifications.

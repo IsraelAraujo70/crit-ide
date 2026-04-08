@@ -23,6 +23,12 @@ type FormatPayload struct {
 	Edits []TextEdit
 }
 
+// CompletionPayload is the event payload for completion results.
+type CompletionPayload struct {
+	Items        []CompletionItem
+	IsIncomplete bool
+}
+
 // ServerStatePayload is the event payload for server state changes.
 type ServerStatePayload struct {
 	LangID string

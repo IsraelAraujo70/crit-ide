@@ -12,6 +12,7 @@ const (
 	EventLSPHover                        // LSP hover result. Payload: *lsp.HoverPayload.
 	EventLSPFormat                       // LSP format result. Payload: *lsp.FormatPayload.
 	EventLSPServerState                  // LSP server state change. Payload: *lsp.ServerStatePayload.
+	EventLSPCompletion                   // LSP completion result. Payload: *lsp.CompletionPayload.
 )
 
 // Event is the message passed through the event bus.

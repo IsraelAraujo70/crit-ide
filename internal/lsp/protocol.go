@@ -114,9 +114,10 @@ type ClientCapabilities struct {
 
 // TextDocumentClientCapabilities represents text document capabilities.
 type TextDocumentClientCapabilities struct {
-	Synchronization *TextDocumentSyncClientCapabilities `json:"synchronization,omitempty"`
-	Hover           *HoverClientCapabilities            `json:"hover,omitempty"`
-	PublishDiagnostics *PublishDiagnosticsClientCapabilities `json:"publishDiagnostics,omitempty"`
+	Synchronization    *TextDocumentSyncClientCapabilities   `json:"synchronization,omitempty"`
+	Hover              *HoverClientCapabilities              `json:"hover,omitempty"`
+	Completion         *CompletionClientCapabilities         `json:"completion,omitempty"`
+	PublishDiagnostics *PublishDiagnosticsClientCapabilities  `json:"publishDiagnostics,omitempty"`
 }
 
 // TextDocumentSyncClientCapabilities represents sync capabilities.
@@ -152,6 +153,85 @@ type ServerCapabilities struct {
 // CompletionOptions represents completion server capabilities.
 type CompletionOptions struct {
 	TriggerCharacters []string `json:"triggerCharacters,omitempty"`
+}
+
+// CompletionItemKind identifies the kind of a completion item.
+type CompletionItemKind int
+
+const (
+	CompletionKindText          CompletionItemKind = 1
+	CompletionKindMethod        CompletionItemKind = 2
+	CompletionKindFunction      CompletionItemKind = 3
+	CompletionKindConstructor   CompletionItemKind = 4
+	CompletionKindField         CompletionItemKind = 5
+	CompletionKindVariable      CompletionItemKind = 6
+	CompletionKindClass         CompletionItemKind = 7
+	CompletionKindInterface     CompletionItemKind = 8
+	CompletionKindModule        CompletionItemKind = 9
+	CompletionKindProperty      CompletionItemKind = 10
+	CompletionKindUnit          CompletionItemKind = 11
+	CompletionKindValue         CompletionItemKind = 12
+	CompletionKindEnum          CompletionItemKind = 13
+	CompletionKindKeyword       CompletionItemKind = 14
+	CompletionKindSnippet       CompletionItemKind = 15
+	CompletionKindColor         CompletionItemKind = 16
+	CompletionKindFile          CompletionItemKind = 17
+	CompletionKindReference     CompletionItemKind = 18
+	CompletionKindFolder        CompletionItemKind = 19
+	CompletionKindEnumMember    CompletionItemKind = 20
+	CompletionKindConstant      CompletionItemKind = 21
+	CompletionKindStruct        CompletionItemKind = 22
+	CompletionKindEvent         CompletionItemKind = 23
+	CompletionKindOperator      CompletionItemKind = 24
+	CompletionKindTypeParameter CompletionItemKind = 25
+)
+
+// CompletionItem represents a single completion suggestion.
+type CompletionItem struct {
+	Label         string             `json:"label"`
+	Kind          CompletionItemKind `json:"kind,omitempty"`
+	Detail        string             `json:"detail,omitempty"`
+	Documentation json.RawMessage    `json:"documentation,omitempty"`
+	InsertText    string             `json:"insertText,omitempty"`
+	FilterText    string             `json:"filterText,omitempty"`
+	SortText      string             `json:"sortText,omitempty"`
+}
+
+// CompletionList is the result of a completion request.
+type CompletionList struct {
+	IsIncomplete bool             `json:"isIncomplete"`
+	Items        []CompletionItem `json:"items"`
+}
+
+// CompletionParams is sent for textDocument/completion.
+type CompletionParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Position     Position               `json:"position"`
+	Context      *CompletionContext     `json:"context,omitempty"`
+}
+
+// CompletionTriggerKind describes how a completion was triggered.
+type CompletionTriggerKind int
+
+const (
+	CompletionTriggerInvoked                         CompletionTriggerKind = 1
+	CompletionTriggerTriggerCharacter                CompletionTriggerKind = 2
+	CompletionTriggerTriggerForIncompleteCompletions CompletionTriggerKind = 3
+)
+
+// CompletionContext contains additional information about the context in which
+// a completion request was triggered.
+type CompletionContext struct {
+	TriggerKind      CompletionTriggerKind `json:"triggerKind"`
+	TriggerCharacter string                `json:"triggerCharacter,omitempty"`
+}
+
+// CompletionClientCapabilities represents client completion capabilities.
+type CompletionClientCapabilities struct {
+	DynamicRegistration bool `json:"dynamicRegistration,omitempty"`
+	CompletionItem      *struct {
+		SnippetSupport bool `json:"snippetSupport,omitempty"`
+	} `json:"completionItem,omitempty"`
 }
 
 // TextDocumentSyncKind defines how text documents are synced.

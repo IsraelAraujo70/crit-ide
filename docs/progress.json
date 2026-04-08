@@ -209,7 +209,9 @@
     "search.replace", "search.replace_all",
     "finder.open", "finder.close", "finder.char", "finder.backspace", "finder.delete",
     "finder.left", "finder.right", "finder.home", "finder.end",
-    "finder.up", "finder.down", "finder.confirm"
+    "finder.up", "finder.down", "finder.confirm",
+    "completion.trigger", "completion.accept", "completion.dismiss",
+    "completion.up", "completion.down"
   ],
   "keybindings": {
     "Arrow Up/Down/Left/Right": "cursor movement (or tree nav when tree focused)",
@@ -254,6 +256,11 @@
     "Double click": "select.word — select word under cursor",
     "Left drag": "mouse.drag",
     "Right click": "menu.open",
-    "Wheel Up/Down": "mouse.scroll (editor or tree, auto-routed)"
+    "Wheel Up/Down": "mouse.scroll (editor or tree, auto-routed)",
+    "Ctrl+Space": "completion.trigger — manual completion trigger",
+    "Enter/Tab (in completion)": "completion.accept — insert selected completion",
+    "Up/Down (in completion)": "completion.up/down — navigate completion items",
+    "Escape (in completion)": "completion.dismiss — close completion popup",
+    ". (auto-trigger)": "completion auto-trigger on LSP trigger characters"
   }
 }
