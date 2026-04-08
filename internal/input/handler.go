@@ -1,6 +1,8 @@
 package input
 
 import (
+	"time"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/israelcorrea/crit-ide/internal/events"
 )
@@ -14,6 +16,10 @@ type Handler struct {
 	btn1Down bool // Is Button1 currently held?
 	anchorX  int  // Screen X where Button1 was first pressed.
 	anchorY  int  // Screen Y where Button1 was first pressed.
+	// Double-click detection.
+	lastClickTime int64 // Unix milliseconds of last click.
+	lastClickX    int
+	lastClickY    int
 }
 
 // NewHandler creates a new input handler.
@@ -103,12 +109,31 @@ func (h *Handler) handleMouse(ev *tcell.EventMouse) {
 	if h.btn1Down {
 		h.btn1Down = false
 		if x == h.anchorX && y == h.anchorY {
-			// Released at same position as press — this is a click.
-			h.bus.Send(events.Event{
-				Type:     events.EventAction,
-				ActionID: "mouse.click",
-				Payload:  events.MouseClickPayload{ScreenX: x, ScreenY: y},
-			})
+			now := time.Now().UnixMilli()
+			// Detect double-click (within 400ms and same position).
+			if now-h.lastClickTime < 400 && x == h.lastClickX && y == h.lastClickY {
+				// Double-click: first send click to position cursor, then select word.
+				h.bus.Send(events.Event{
+					Type:     events.EventAction,
+					ActionID: "mouse.click",
+					Payload:  events.MouseClickPayload{ScreenX: x, ScreenY: y},
+				})
+				h.bus.Send(events.Event{
+					Type:     events.EventAction,
+					ActionID: "select.word",
+				})
+				h.lastClickTime = 0 // Reset to prevent triple-click triggering another double.
+			} else {
+				// Single click.
+				h.bus.Send(events.Event{
+					Type:     events.EventAction,
+					ActionID: "mouse.click",
+					Payload:  events.MouseClickPayload{ScreenX: x, ScreenY: y},
+				})
+				h.lastClickTime = now
+				h.lastClickX = x
+				h.lastClickY = y
+			}
 		}
 		// If position differs, the drag events already handled it.
 	}
@@ -152,6 +177,27 @@ func (h *Handler) handleKey(ev *tcell.EventKey) {
 			return
 		case tcell.KeyCtrlL:
 			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "lsp.format"})
+			return
+		case tcell.KeyCtrlZ:
+			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "edit.undo"})
+			return
+		case tcell.KeyCtrlY:
+			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "edit.redo"})
+			return
+		case tcell.KeyCtrlD:
+			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "edit.duplicate_line"})
+			return
+		}
+	}
+
+	// Ctrl+Arrow for word movement.
+	if ev.Modifiers()&tcell.ModCtrl != 0 {
+		switch ev.Key() {
+		case tcell.KeyLeft:
+			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "cursor.word_left"})
+			return
+		case tcell.KeyRight:
+			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "cursor.word_right"})
 			return
 		}
 	}

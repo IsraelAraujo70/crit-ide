@@ -42,6 +42,7 @@ type Buffer struct {
 	Selection  *Selection // Active text selection, nil when no selection.
 	LanguageID string     // Language identifier for syntax highlighting and LSP.
 	desiredCol int        // Sticky column for Up/Down movement (byte offset).
+	Undo       *UndoStack // Undo/redo history.
 }
 
 // NewBuffer creates a new empty scratch buffer.
@@ -50,6 +51,7 @@ func NewBuffer(id BufferID) *Buffer {
 		ID:   id,
 		Kind: BufferKindScratch,
 		Text: NewLineStore(""),
+		Undo: NewUndoStack(1000),
 	}
 }
 
@@ -77,6 +79,7 @@ func LoadFile(id BufferID, path string) (*Buffer, error) {
 		Path: absPath,
 		Kind: BufferKindFile,
 		Text: NewLineStore(content),
+		Undo: NewUndoStack(1000),
 	}, nil
 }
 
@@ -106,6 +109,13 @@ func (b *Buffer) InsertChar(ch rune) {
 		return
 	}
 	s := string(ch)
+	b.Undo.Push(UndoEntry{
+		Kind:      EditInsert,
+		Pos:       Position{b.CursorRow, b.CursorCol},
+		Text:      s,
+		CursorRow: b.CursorRow,
+		CursorCol: b.CursorCol,
+	})
 	err := b.Text.Insert(Position{b.CursorRow, b.CursorCol}, s)
 	if err != nil {
 		return
@@ -117,6 +127,7 @@ func (b *Buffer) InsertChar(ch rune) {
 
 // InsertNewline splits the current line at the cursor position.
 // If text is selected, it replaces the selection.
+// Auto-indents by copying leading whitespace from the current line.
 func (b *Buffer) InsertNewline() {
 	if b.ReadOnly {
 		return
@@ -125,13 +136,31 @@ func (b *Buffer) InsertNewline() {
 		b.ReplaceSelection("\n")
 		return
 	}
-	err := b.Text.Insert(Position{b.CursorRow, b.CursorCol}, "\n")
+	// Compute auto-indent: leading whitespace of the current line.
+	currentLine := b.Text.Line(b.CursorRow)
+	indent := ""
+	for _, ch := range currentLine {
+		if ch == ' ' || ch == '\t' {
+			indent += string(ch)
+		} else {
+			break
+		}
+	}
+	insertText := "\n" + indent
+	b.Undo.Push(UndoEntry{
+		Kind:      EditInsert,
+		Pos:       Position{b.CursorRow, b.CursorCol},
+		Text:      insertText,
+		CursorRow: b.CursorRow,
+		CursorCol: b.CursorCol,
+	})
+	err := b.Text.Insert(Position{b.CursorRow, b.CursorCol}, insertText)
 	if err != nil {
 		return
 	}
 	b.CursorRow++
-	b.CursorCol = 0
-	b.desiredCol = 0
+	b.CursorCol = len(indent)
+	b.desiredCol = b.CursorCol
 	b.Dirty = true
 }
 
@@ -152,10 +181,19 @@ func (b *Buffer) DeleteBackward() {
 		if size == 0 {
 			size = 1
 		}
-		err := b.Text.Delete(Range{
+		delRange := Range{
 			Start: Position{b.CursorRow, b.CursorCol - size},
 			End:   Position{b.CursorRow, b.CursorCol},
+		}
+		deleted := b.Text.Slice(delRange)
+		b.Undo.Push(UndoEntry{
+			Kind:      EditDelete,
+			Pos:       delRange.Start,
+			Text:      deleted,
+			CursorRow: b.CursorRow,
+			CursorCol: b.CursorCol,
 		})
+		err := b.Text.Delete(delRange)
 		if err != nil {
 			return
 		}
@@ -165,10 +203,19 @@ func (b *Buffer) DeleteBackward() {
 	} else if b.CursorRow > 0 {
 		// At the start of a line: merge with the previous line.
 		prevLineLen := len(b.Text.Line(b.CursorRow - 1))
-		err := b.Text.Delete(Range{
+		delRange := Range{
 			Start: Position{b.CursorRow - 1, prevLineLen},
 			End:   Position{b.CursorRow, 0},
+		}
+		deleted := b.Text.Slice(delRange)
+		b.Undo.Push(UndoEntry{
+			Kind:      EditDelete,
+			Pos:       delRange.Start,
+			Text:      deleted,
+			CursorRow: b.CursorRow,
+			CursorCol: b.CursorCol,
 		})
+		err := b.Text.Delete(delRange)
 		if err != nil {
 			return
 		}
@@ -196,20 +243,38 @@ func (b *Buffer) DeleteForward() {
 		if size == 0 {
 			size = 1
 		}
-		err := b.Text.Delete(Range{
+		delRange := Range{
 			Start: Position{b.CursorRow, b.CursorCol},
 			End:   Position{b.CursorRow, b.CursorCol + size},
+		}
+		deleted := b.Text.Slice(delRange)
+		b.Undo.Push(UndoEntry{
+			Kind:      EditDelete,
+			Pos:       delRange.Start,
+			Text:      deleted,
+			CursorRow: b.CursorRow,
+			CursorCol: b.CursorCol,
 		})
+		err := b.Text.Delete(delRange)
 		if err != nil {
 			return
 		}
 		b.Dirty = true
 	} else if b.CursorRow < b.Text.LineCount()-1 {
 		// At end of line: merge with the next line.
-		err := b.Text.Delete(Range{
+		delRange := Range{
 			Start: Position{b.CursorRow, len(line)},
 			End:   Position{b.CursorRow + 1, 0},
+		}
+		deleted := b.Text.Slice(delRange)
+		b.Undo.Push(UndoEntry{
+			Kind:      EditDelete,
+			Pos:       delRange.Start,
+			Text:      deleted,
+			CursorRow: b.CursorRow,
+			CursorCol: b.CursorCol,
 		})
+		err := b.Text.Delete(delRange)
 		if err != nil {
 			return
 		}
@@ -326,6 +391,14 @@ func (b *Buffer) DeleteSelection() {
 		return
 	}
 	r := b.Selection.Normalized()
+	deleted := b.Text.Slice(r)
+	b.Undo.Push(UndoEntry{
+		Kind:      EditDelete,
+		Pos:       r.Start,
+		Text:      deleted,
+		CursorRow: b.CursorRow,
+		CursorCol: b.CursorCol,
+	})
 	_ = b.Text.Delete(r)
 	b.CursorRow = r.Start.Line
 	b.CursorCol = r.Start.Col
@@ -338,6 +411,13 @@ func (b *Buffer) DeleteSelection() {
 // ReplaceSelection deletes the selection and inserts text at the cursor.
 func (b *Buffer) ReplaceSelection(text string) {
 	b.DeleteSelection()
+	b.Undo.Push(UndoEntry{
+		Kind:      EditInsert,
+		Pos:       Position{b.CursorRow, b.CursorCol},
+		Text:      text,
+		CursorRow: b.CursorRow,
+		CursorCol: b.CursorCol,
+	})
 	_ = b.Text.Insert(Position{b.CursorRow, b.CursorCol}, text)
 	// Advance cursor past inserted text.
 	for _, ch := range text {
@@ -411,6 +491,227 @@ func VisualColToByteOffset(line string, visualCol int) int {
 		}
 	}
 	return len(line)
+}
+
+// UndoEdit reverses the most recent edit operation.
+func (b *Buffer) UndoEdit() {
+	entry, ok := b.Undo.PopUndo()
+	if !ok {
+		return
+	}
+	b.ClearSelection()
+	switch entry.Kind {
+	case EditInsert:
+		// To undo an insert, delete the inserted text.
+		endPos := b.positionAfterInsert(entry.Pos, entry.Text)
+		_ = b.Text.Delete(Range{Start: entry.Pos, End: endPos})
+	case EditDelete:
+		// To undo a delete, re-insert the deleted text.
+		_ = b.Text.Insert(entry.Pos, entry.Text)
+	}
+	// Restore cursor position.
+	b.CursorRow = entry.CursorRow
+	b.CursorCol = entry.CursorCol
+	b.desiredCol = b.CursorCol
+	b.ClampCursor()
+	b.Dirty = true
+	b.Undo.PushRedo(entry)
+}
+
+// RedoEdit re-applies the most recently undone edit.
+func (b *Buffer) RedoEdit() {
+	entry, ok := b.Undo.PopRedo()
+	if !ok {
+		return
+	}
+	b.ClearSelection()
+	switch entry.Kind {
+	case EditInsert:
+		// Re-apply the insert.
+		_ = b.Text.Insert(entry.Pos, entry.Text)
+		// Move cursor to end of inserted text.
+		endPos := b.positionAfterInsert(entry.Pos, entry.Text)
+		b.CursorRow = endPos.Line
+		b.CursorCol = endPos.Col
+	case EditDelete:
+		// Re-apply the delete.
+		endPos := b.positionAfterInsert(entry.Pos, entry.Text)
+		_ = b.Text.Delete(Range{Start: entry.Pos, End: endPos})
+		b.CursorRow = entry.Pos.Line
+		b.CursorCol = entry.Pos.Col
+	}
+	b.desiredCol = b.CursorCol
+	b.ClampCursor()
+	b.Dirty = true
+	// Push back onto undo stack (without clearing redo — use internal push).
+	b.Undo.undos = append(b.Undo.undos, entry)
+}
+
+// positionAfterInsert computes the end position after inserting text at pos.
+func (b *Buffer) positionAfterInsert(pos Position, text string) Position {
+	row := pos.Line
+	col := pos.Col
+	for _, ch := range text {
+		if ch == '\n' {
+			row++
+			col = 0
+		} else {
+			col += len(string(ch))
+		}
+	}
+	return Position{row, col}
+}
+
+// WordLeft moves the cursor to the beginning of the previous word.
+func (b *Buffer) WordLeft() {
+	line := b.Text.Line(b.CursorRow)
+	if b.CursorCol == 0 {
+		// Move to end of previous line.
+		if b.CursorRow > 0 {
+			b.CursorRow--
+			b.CursorCol = len(b.Text.Line(b.CursorRow))
+		}
+		b.desiredCol = b.CursorCol
+		return
+	}
+	// Work backwards from cursor through the line bytes.
+	col := b.CursorCol
+	// Skip whitespace first.
+	for col > 0 {
+		_, size := utf8.DecodeLastRuneInString(line[:col])
+		if size == 0 {
+			break
+		}
+		r, _ := utf8.DecodeRuneInString(line[col-size:])
+		if !isWordSeparator(r) {
+			break
+		}
+		col -= size
+	}
+	// Skip word characters.
+	for col > 0 {
+		_, size := utf8.DecodeLastRuneInString(line[:col])
+		if size == 0 {
+			break
+		}
+		r, _ := utf8.DecodeRuneInString(line[col-size:])
+		if isWordSeparator(r) {
+			break
+		}
+		col -= size
+	}
+	b.CursorCol = col
+	b.desiredCol = b.CursorCol
+}
+
+// WordRight moves the cursor to the beginning of the next word.
+func (b *Buffer) WordRight() {
+	line := b.Text.Line(b.CursorRow)
+	if b.CursorCol >= len(line) {
+		// Move to start of next line.
+		if b.CursorRow < b.Text.LineCount()-1 {
+			b.CursorRow++
+			b.CursorCol = 0
+		}
+		b.desiredCol = b.CursorCol
+		return
+	}
+	col := b.CursorCol
+	// Skip word characters first.
+	for col < len(line) {
+		r, size := utf8.DecodeRuneInString(line[col:])
+		if isWordSeparator(r) {
+			break
+		}
+		col += size
+	}
+	// Skip whitespace/separators.
+	for col < len(line) {
+		r, size := utf8.DecodeRuneInString(line[col:])
+		if !isWordSeparator(r) {
+			break
+		}
+		col += size
+	}
+	b.CursorCol = col
+	b.desiredCol = b.CursorCol
+}
+
+// isWordSeparator returns true if the rune is a whitespace or punctuation character.
+func isWordSeparator(r rune) bool {
+	if r == '_' {
+		return false // Treat underscore as part of a word (identifiers).
+	}
+	return r == ' ' || r == '\t' || r == '\n' || r == '\r' ||
+		r == '.' || r == ',' || r == ';' || r == ':' ||
+		r == '(' || r == ')' || r == '[' || r == ']' ||
+		r == '{' || r == '}' || r == '<' || r == '>' ||
+		r == '"' || r == '\'' || r == '`' ||
+		r == '+' || r == '-' || r == '*' || r == '/' ||
+		r == '=' || r == '!' || r == '&' || r == '|' ||
+		r == '~' || r == '^' || r == '%' || r == '#' ||
+		r == '@' || r == '?' || r == '\\'
+}
+
+// DuplicateLine duplicates the current line below.
+func (b *Buffer) DuplicateLine() {
+	if b.ReadOnly {
+		return
+	}
+	line := b.Text.Line(b.CursorRow)
+	insertPos := Position{b.CursorRow, len(line)}
+	insertText := "\n" + line
+	b.Undo.Push(UndoEntry{
+		Kind:      EditInsert,
+		Pos:       insertPos,
+		Text:      insertText,
+		CursorRow: b.CursorRow,
+		CursorCol: b.CursorCol,
+	})
+	_ = b.Text.Insert(insertPos, insertText)
+	b.CursorRow++
+	b.Dirty = true
+}
+
+// SelectWord selects the word under or near the cursor.
+func (b *Buffer) SelectWord() {
+	line := b.Text.Line(b.CursorRow)
+	if len(line) == 0 {
+		return
+	}
+	col := b.CursorCol
+	if col >= len(line) {
+		col = len(line) - 1
+		if col < 0 {
+			return
+		}
+	}
+	// Find word boundaries.
+	start := col
+	for start > 0 {
+		_, size := utf8.DecodeLastRuneInString(line[:start])
+		r, _ := utf8.DecodeRuneInString(line[start-size:])
+		if isWordSeparator(r) {
+			break
+		}
+		start -= size
+	}
+	end := col
+	for end < len(line) {
+		r, size := utf8.DecodeRuneInString(line[end:])
+		if isWordSeparator(r) {
+			break
+		}
+		end += size
+	}
+	if start != end {
+		b.SetSelection(
+			Position{b.CursorRow, start},
+			Position{b.CursorRow, end},
+		)
+		b.CursorCol = end
+		b.desiredCol = b.CursorCol
+	}
 }
 
 // FileName returns the base name of the file, or "[scratch]" for scratch buffers.

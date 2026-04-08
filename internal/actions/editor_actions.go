@@ -250,4 +250,18 @@ func RegisterAll(r *Registry) {
 	r.Register(&promptEnd{})
 	r.Register(&promptCancel{})
 	r.Register(&promptConfirm{})
+
+	// Undo/redo.
+	r.Register(&undoAction{})
+	r.Register(&redoAction{})
+
+	// Word movement.
+	r.Register(&cursorWordLeft{})
+	r.Register(&cursorWordRight{})
+
+	// Line operations.
+	r.Register(&duplicateLine{})
+
+	// Word selection.
+	r.Register(&selectWord{})
 }

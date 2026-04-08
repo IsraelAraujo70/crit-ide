@@ -130,16 +130,23 @@ docs/
 ## Current State
 
 - Multi-buffer editing with tab bar and text selection
+- **Undo/redo** (Ctrl+Z / Ctrl+Y) with full edit history
+- **Word movement** (Ctrl+Left / Ctrl+Right) for fast navigation
+- **Duplicate line** (Ctrl+D)
+- **Auto-indent** on Enter (copies leading whitespace)
+- **Double-click** to select word
+- **Syntax highlighting** via tree-sitter (14 languages: Go, Python, JS, TS, Rust, C, CSS, HTML, JSON, MD, TOML, YAML, Bash)
+- **LSP integration** — diagnostics (inline underline), hover (Ctrl+K), go-to-definition (Ctrl+G/F12), format (Ctrl+L)
 - File tree panel (NeoTree-style) on the right side with toggle (Ctrl+B)
-- 41 registered actions (cursor, edit, file, scroll, mouse, clipboard, selection, context menu, file tree, tabs)
-- Mouse: click, drag-select, wheel scroll, right-click context menu, tab click, tree click
+- 47 registered actions (cursor, edit, file, scroll, mouse, clipboard, selection, context menu, file tree, tabs, undo, word-movement, LSP)
+- Mouse: click, double-click, drag-select, wheel scroll, right-click context menu, tab click, tree click
 - Clipboard: Ctrl+C/X/V, system clipboard via atotto/clipboard
 - Tab management: Ctrl+W close, Ctrl+PgDn/PgUp switch, mouse click tabs
-- File tree: keyboard navigation (arrows, Enter), expand/collapse dirs, click to open
+- File tree: keyboard navigation (arrows, Enter), expand/collapse dirs, click to open, create/rename/delete
 - Focus routing: editor vs file tree, with smart action remapping
 - Hardcoded keymap (configurable keymap engine planned)
 - Full redraw rendering (diff rendering planned)
-- No undo/redo, no splits, no syntax highlighting, no LSP, no Git, no AI
+- No splits, no Git integration, no AI yet
 
 ## Roadmap
 
