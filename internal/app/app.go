@@ -258,8 +258,16 @@ func (a *App) handleNormalAction(actionID string, ctx *actions.ActionContext) {
 	// Global actions work regardless of focus.
 	switch actionID {
 	case "tree.toggle", "tab.next", "tab.prev", "tab.close", "app.quit",
-		"file.save", "tree.refresh":
+		"file.save", "tree.refresh", "edit.undo", "edit.redo":
 		_ = a.registry.Execute(actionID, ctx)
+		return
+	}
+
+	// Select word is a global editor action.
+	if actionID == "select.word" {
+		if a.focusArea == actions.FocusEditor {
+			_ = a.registry.Execute(actionID, ctx)
+		}
 		return
 	}
 

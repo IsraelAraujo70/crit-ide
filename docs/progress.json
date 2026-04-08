@@ -1,6 +1,6 @@
 {
   "project": "crit-ide",
-  "version": "0.1.0-dev",
+  "version": "0.2.0-dev",
   "phases": [
     {
       "name": "Foundation",
@@ -32,7 +32,8 @@
         { "item": "Select All (Ctrl+A)", "status": "done" },
         { "item": "Right-click context menu (Copy/Cut/Paste/Select All)", "status": "done" },
         { "item": "Modal input routing for context menu", "status": "done" },
-        { "item": "Popup rendering with borders and keyboard navigation", "status": "done" }
+        { "item": "Popup rendering with borders and keyboard navigation", "status": "done" },
+        { "item": "Double-click to select word", "status": "done" }
       ]
     },
     {
@@ -72,6 +73,49 @@
       ]
     },
     {
+      "name": "Syntax Highlighting",
+      "status": "done",
+      "summary": "Tree-sitter based syntax highlighting with 14 language support",
+      "deliverables": [
+        { "item": "Tree-sitter integration via go-tree-sitter", "status": "done" },
+        { "item": "TSLangRegistry with language detection by file extension", "status": "done" },
+        { "item": "Highlighter interface (HighlightLine returns tokens)", "status": "done" },
+        { "item": "Token-to-theme style mapping", "status": "done" },
+        { "item": "14 languages: Go, Python, JavaScript, TypeScript, Rust, C, CSS, HTML, JSON, Markdown, TOML, YAML, Bash", "status": "done" },
+        { "item": "Incremental reparse on content change (SetSource)", "status": "done" },
+        { "item": "Per-buffer language switching on tab change", "status": "done" }
+      ]
+    },
+    {
+      "name": "LSP Integration",
+      "status": "done",
+      "summary": "Language Server Protocol client with diagnostics, hover, go-to-definition, and formatting",
+      "deliverables": [
+        { "item": "LSP client (stdio JSON-RPC)", "status": "done" },
+        { "item": "LSP Manager (multi-language server lifecycle)", "status": "done" },
+        { "item": "Diagnostics (inline underline rendering with severity colors)", "status": "done" },
+        { "item": "Go to definition (Ctrl+G / F12)", "status": "done" },
+        { "item": "Hover information (Ctrl+K → statusline)", "status": "done" },
+        { "item": "Format document (Ctrl+L)", "status": "done" },
+        { "item": "didOpen / didChange / didSave / didClose notifications", "status": "done" },
+        { "item": "LSP position ↔ editor byte offset conversion", "status": "done" },
+        { "item": "Error/warning count in statusline", "status": "done" }
+      ]
+    },
+    {
+      "name": "Editing Essentials",
+      "status": "done",
+      "summary": "Undo/redo, word movement, auto-indent, duplicate line, and word selection",
+      "deliverables": [
+        { "item": "Undo/redo system with UndoStack (Ctrl+Z / Ctrl+Y)", "status": "done" },
+        { "item": "Word movement (Ctrl+Left / Ctrl+Right)", "status": "done" },
+        { "item": "Duplicate line (Ctrl+D)", "status": "done" },
+        { "item": "Auto-indent on Enter (copies leading whitespace)", "status": "done" },
+        { "item": "Double-click word selection", "status": "done" },
+        { "item": "SelectWord action for programmatic word selection", "status": "done" }
+      ]
+    },
+    {
       "name": "Splits",
       "status": "planned",
       "summary": "Horizontal/vertical splits with multiple views per buffer",
@@ -94,30 +138,6 @@
         { "item": "Chord/leader key support", "status": "planned" },
         { "item": "Command palette popup", "status": "planned" },
         { "item": "Fuzzy file finder", "status": "planned" }
-      ]
-    },
-    {
-      "name": "Visual Polish",
-      "status": "planned",
-      "summary": "Syntax highlighting, file tree, project-wide search, undo/redo",
-      "deliverables": [
-        { "item": "Syntax highlighting (regex-based V1, Tree-sitter V2)", "status": "planned" },
-        { "item": "File explorer / tree panel", "status": "planned" },
-        { "item": "Project-wide search with results navigation", "status": "planned" },
-        { "item": "Undo/redo", "status": "planned" }
-      ]
-    },
-    {
-      "name": "LSP",
-      "status": "planned",
-      "summary": "Language Server Protocol integration",
-      "deliverables": [
-        { "item": "LSP client (stdio JSON-RPC)", "status": "planned" },
-        { "item": "Diagnostics (inline + panel)", "status": "planned" },
-        { "item": "Go to definition", "status": "planned" },
-        { "item": "Hover information", "status": "planned" },
-        { "item": "Rename symbol", "status": "planned" },
-        { "item": "Completion popup (LSP source)", "status": "planned" }
       ]
     },
     {
@@ -159,12 +179,14 @@
   "actions_registered": [
     "cursor.up", "cursor.down", "cursor.left", "cursor.right",
     "cursor.home", "cursor.end",
+    "cursor.word_left", "cursor.word_right",
     "insert.char", "insert.newline",
     "delete.backward", "delete.forward",
+    "edit.undo", "edit.redo", "edit.duplicate_line",
     "file.save", "app.quit",
     "scroll.up", "scroll.down",
     "mouse.click", "mouse.scroll", "mouse.drag",
-    "select.all", "input.escape",
+    "select.all", "select.word", "input.escape",
     "clipboard.copy", "clipboard.cut", "clipboard.paste",
     "menu.open", "menu.close", "menu.up", "menu.down", "menu.execute", "menu.click",
     "tree.toggle", "tree.up", "tree.down", "tree.enter", "tree.expand", "tree.collapse",
@@ -173,29 +195,38 @@
     "tab.next", "tab.prev", "tab.close", "tab.click",
     "prompt.char", "prompt.backspace", "prompt.delete",
     "prompt.left", "prompt.right", "prompt.home", "prompt.end",
-    "prompt.cancel", "prompt.confirm"
+    "prompt.cancel", "prompt.confirm",
+    "lsp.hover", "lsp.definition", "lsp.format"
   ],
   "keybindings": {
     "Arrow Up/Down/Left/Right": "cursor movement (or tree nav when tree focused)",
+    "Ctrl+Left / Ctrl+Right": "cursor.word_left / cursor.word_right",
     "Home / End": "cursor.home / cursor.end",
     "PageUp / PageDown": "scroll.up / scroll.down",
-    "Enter": "insert.newline (or tree.enter when tree focused)",
+    "Enter": "insert.newline (with auto-indent; or tree.enter when tree focused)",
     "Backspace / Delete": "delete.backward / delete.forward",
     "Tab": "insert.char (tab)",
     "Ctrl+S": "file.save",
     "Ctrl+Q": "app.quit",
+    "Ctrl+Z": "edit.undo",
+    "Ctrl+Y": "edit.redo",
+    "Ctrl+D": "edit.duplicate_line",
     "Ctrl+C / Ctrl+X / Ctrl+V": "clipboard.copy / cut / paste",
     "Ctrl+A": "select.all",
     "Ctrl+B": "tree.toggle",
     "Ctrl+W": "tab.close",
     "Ctrl+PageDown": "tab.next",
     "Ctrl+PageUp": "tab.prev",
+    "Ctrl+K": "lsp.hover — show type info in statusline",
+    "Ctrl+G / F12": "lsp.definition — go to definition",
+    "Ctrl+L": "lsp.format — format document",
     "a (tree focused)": "tree.new — create file/dir",
     "r (tree focused)": "tree.rename — rename at cursor",
     "d (tree focused)": "tree.delete — delete at cursor",
     "Backspace/Delete (tree focused)": "tree.delete",
     "Escape": "input.escape / tree.focus.editor / prompt.cancel",
     "Left click": "mouse.click / tab.click / tree.click (auto-routed by position)",
+    "Double click": "select.word — select word under cursor",
     "Left drag": "mouse.drag",
     "Right click": "menu.open",
     "Wheel Up/Down": "mouse.scroll (editor or tree, auto-routed)"
