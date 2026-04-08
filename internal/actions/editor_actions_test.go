@@ -31,6 +31,7 @@ type mockApp struct {
 	treeVisible   bool
 	focus         FocusArea
 	prompt        *editor.PromptState
+	search        *editor.SearchState
 }
 
 func (m *mockApp) ActiveBuffer() *editor.Buffer          { return m.buffer }
@@ -73,6 +74,10 @@ func (m *mockApp) SetPrompt(p *editor.PromptState)     { m.prompt = p }
 func (m *mockApp) LSPServer(langID string) any                   { return nil }
 func (m *mockApp) SetStatusMessage(msg string)                   {}
 func (m *mockApp) NavigateToPosition(path string, line, col int) {}
+
+// Search stubs.
+func (m *mockApp) SearchState() *editor.SearchState      { return m.search }
+func (m *mockApp) SetSearchState(s *editor.SearchState)   { m.search = s }
 
 func newTestContext(app *mockApp, actionID string, payload any) *ActionContext {
 	return &ActionContext{

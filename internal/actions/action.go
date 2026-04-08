@@ -14,6 +14,7 @@ const (
 	ModeNormal      InputMode = iota // Normal editing mode.
 	ModeContextMenu                  // Context menu is open.
 	ModePrompt                       // Input prompt is active.
+	ModeSearch                       // Find/Replace bar is active.
 )
 
 // FocusArea indicates which panel currently has keyboard focus.
@@ -100,6 +101,10 @@ type AppState interface {
 	LSPServer(langID string) any                      // Returns *lsp.Server or nil (typed as any to avoid import cycle).
 	SetStatusMessage(msg string)                      // Show temporary message in statusline.
 	NavigateToPosition(path string, line, col int)    // Jump to position (same file) or show path (different file).
+
+	// Search.
+	SearchState() *editor.SearchState
+	SetSearchState(s *editor.SearchState)
 }
 
 // ActionContext carries everything an action needs to execute.

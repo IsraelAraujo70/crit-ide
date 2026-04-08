@@ -57,7 +57,10 @@ type ViewState struct {
 	TreeFocused   bool       // Whether the tree panel has focus.
 
 	// Input prompt.
-	Prompt        *editor.PromptState // Non-nil when prompt is active.
+	Prompt        *editor.PromptState  // Non-nil when prompt is active.
+
+	// Search state.
+	Search        *editor.SearchState  // Non-nil when find/replace is active.
 
 	// Syntax highlighting.
 	Highlighter  highlight.Highlighter
@@ -157,6 +160,11 @@ func (r *Renderer) Render(vs *ViewState) {
 	// Build a quick-lookup map for diagnostics on visible lines.
 	diagMap := r.buildDiagMap(vs.Diagnostics, vs.ScrollY, vs.ScrollY+editorHeight)
 
+	// Build search match map for visible lines.
+	searchMatchStyle := tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(tcell.NewRGBColor(200, 180, 80))
+	searchCurrentStyle := tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(tcell.NewRGBColor(255, 140, 50)).Bold(true)
+	searchMatchMap := r.buildSearchMatchMap(vs.Search, vs.ScrollY, vs.ScrollY+editorHeight)
+
 	for row := 0; row < editorHeight; row++ {
 		screenRow := contentStartY + row
 		lineIdx := vs.ScrollY + row
@@ -240,6 +248,20 @@ func (r *Renderer) Render(vs *ViewState) {
 				}
 			}
 
+			// Search match highlighting (overrides syntax/diagnostics).
+			if matches, ok := searchMatchMap[lineIdx]; ok {
+				for _, sm := range matches {
+					if byteOff >= sm.startCol && byteOff < sm.endCol {
+						if sm.isCurrent {
+							style = searchCurrentStyle
+						} else {
+							style = searchMatchStyle
+						}
+						break
+					}
+				}
+			}
+
 			// Selection overrides everything.
 			if lineSelStart >= 0 && byteOff >= lineSelStart && byteOff < lineSelEnd {
 				style = selectionStyle
@@ -269,16 +291,29 @@ func (r *Renderer) Render(vs *ViewState) {
 		r.drawFileTree(vs, editorWidth, treeWidth, tabBarHeight, editorHeight+1, treeBorderColor)
 	}
 
-	// --- Draw statusline or prompt ---
+	// --- Draw statusline, prompt, or search bar ---
 	statuslineRow := contentStartY + editorHeight
-	if vs.Prompt != nil {
+	if vs.Search != nil {
+		r.drawSearchBar(vs.Search, statuslineRow, vs.Width)
+	} else if vs.Prompt != nil {
 		r.drawPrompt(vs.Prompt, statuslineRow, vs.Width)
 	} else {
 		r.drawStatusline(vs, statuslineRow, gutterWidth, th)
 	}
 
 	// --- Position the terminal cursor ---
-	if vs.Prompt != nil {
+	if vs.Search != nil {
+		// Show cursor inside the search bar's active field.
+		var cursorX int
+		if vs.Search.ActiveField == editor.FieldFind {
+			cursorX = len("Find: ") + vs.Search.QueryCursor
+		} else {
+			cursorX = len("Replace: ") + vs.Search.ReplaceCursor
+		}
+		if cursorX < vs.Width {
+			r.screen.ShowCursor(cursorX, statuslineRow)
+		}
+	} else if vs.Prompt != nil {
 		// Show cursor inside the prompt input.
 		promptCursorX := len(vs.Prompt.Label) + vs.Prompt.CursorPos
 		if promptCursorX < vs.Width {
@@ -691,4 +726,117 @@ func (r *Renderer) buildDiagMap(diags []DiagnosticRange, minLine, maxLine int) m
 		}
 	}
 	return m
+}
+
+// searchMatchEntry represents a single search match on a line for rendering.
+type searchMatchEntry struct {
+	startCol  int
+	endCol    int
+	isCurrent bool
+}
+
+// buildSearchMatchMap builds a per-line map of search matches for the visible range.
+func (r *Renderer) buildSearchMatchMap(search *editor.SearchState, minLine, maxLine int) map[int][]searchMatchEntry {
+	if search == nil || len(search.Matches) == 0 {
+		return nil
+	}
+	m := make(map[int][]searchMatchEntry)
+	for i, match := range search.Matches {
+		if match.Start.Line >= minLine && match.Start.Line < maxLine {
+			m[match.Start.Line] = append(m[match.Start.Line], searchMatchEntry{
+				startCol:  match.Start.Col,
+				endCol:    match.End.Col,
+				isCurrent: i == search.CurrentIdx,
+			})
+		}
+	}
+	return m
+}
+
+// drawSearchBar renders the Find/Replace bar (replaces statusline when active).
+func (r *Renderer) drawSearchBar(s *editor.SearchState, y, width int) {
+	labelStyle := tcell.StyleDefault.
+		Foreground(tcell.NewRGBColor(100, 200, 100)).
+		Background(tcell.NewRGBColor(25, 35, 25)).
+		Bold(true)
+	inputStyle := tcell.StyleDefault.
+		Foreground(tcell.ColorWhite).
+		Background(tcell.NewRGBColor(25, 35, 25))
+	inactiveInputStyle := tcell.StyleDefault.
+		Foreground(tcell.NewRGBColor(150, 150, 150)).
+		Background(tcell.NewRGBColor(30, 30, 30))
+	countStyle := tcell.StyleDefault.
+		Foreground(tcell.NewRGBColor(180, 180, 100)).
+		Background(tcell.NewRGBColor(25, 35, 25))
+
+	// Clear the row.
+	for x := 0; x < width; x++ {
+		r.screen.SetContent(x, y, ' ', nil, inputStyle)
+	}
+
+	x := 0
+
+	if s.ActiveField == editor.FieldFind || !s.ShowReplace {
+		// Draw find field.
+		findLabel := "Find: "
+		for _, ch := range findLabel {
+			if x >= width {
+				break
+			}
+			r.screen.SetContent(x, y, ch, nil, labelStyle)
+			x++
+		}
+		for _, ch := range s.Query {
+			if x >= width {
+				break
+			}
+			r.screen.SetContent(x, y, ch, nil, inputStyle)
+			x++
+		}
+
+		// Draw match count on the right.
+		var countStr string
+		if s.Query == "" {
+			countStr = ""
+		} else if len(s.Matches) == 0 {
+			countStr = " No matches"
+		} else {
+			countStr = fmt.Sprintf(" %d/%d", s.CurrentMatchNumber(), s.MatchCount())
+		}
+		if s.ShowReplace {
+			countStr += " [Tab: Replace]"
+		} else {
+			countStr += " [Tab: +Replace]"
+		}
+		right := countStr + " "
+		rx := width - len(right)
+		if rx > x+1 {
+			r.drawString(rx, y, right, countStyle)
+		}
+	} else {
+		// Draw replace field.
+		replaceLabel := "Replace: "
+		for _, ch := range replaceLabel {
+			if x >= width {
+				break
+			}
+			r.screen.SetContent(x, y, ch, nil, labelStyle)
+			x++
+		}
+		for _, ch := range s.ReplaceText {
+			if x >= width {
+				break
+			}
+			r.screen.SetContent(x, y, ch, nil, inputStyle)
+			x++
+		}
+
+		// Draw hints on the right.
+		hints := " [Tab: Find] [Enter: Next] [Ctrl+R: Replace] [Ctrl+A: All] "
+		_ = inactiveInputStyle // suppress unused
+		rx := width - len(hints)
+		if rx > x+1 {
+			r.drawString(rx, y, hints, countStyle)
+		}
+	}
 }

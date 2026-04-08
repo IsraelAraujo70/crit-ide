@@ -52,6 +52,9 @@ type App struct {
 	// Input prompt.
 	prompt *editor.PromptState
 
+	// Search state.
+	search *editor.SearchState
+
 	// Syntax highlighting.
 	highlighter          *highlight.TreeSitterHighlighter
 	langReg              *highlight.TSLangRegistry
@@ -165,6 +168,8 @@ func (a *App) Run() error {
 				a.handleContextMenuAction(ev.ActionID, ctx)
 			case actions.ModePrompt:
 				a.handlePromptAction(ev.ActionID, ctx)
+			case actions.ModeSearch:
+				a.handleSearchAction(ev.ActionID, ctx)
 			}
 
 			// Execute any pending action (from menu item execution).
@@ -258,7 +263,8 @@ func (a *App) handleNormalAction(actionID string, ctx *actions.ActionContext) {
 	// Global actions work regardless of focus.
 	switch actionID {
 	case "tree.toggle", "tab.next", "tab.prev", "tab.close", "app.quit",
-		"file.save", "tree.refresh", "edit.undo", "edit.redo":
+		"file.save", "tree.refresh", "edit.undo", "edit.redo",
+		"search.open":
 		_ = a.registry.Execute(actionID, ctx)
 		return
 	}
@@ -441,6 +447,9 @@ func (a *App) render() {
 	if a.prompt != nil {
 		vs.Prompt = a.prompt
 	}
+	if a.search != nil {
+		vs.Search = a.search
+	}
 
 	// Build tab info.
 	for i, b := range a.buffers {
@@ -563,6 +572,57 @@ func (a *App) handlePromptAction(actionID string, ctx *actions.ActionContext) {
 		return
 	}
 	// Ignore all other actions while prompt is open.
+}
+
+// handleSearchAction routes actions while the Find/Replace bar is active.
+func (a *App) handleSearchAction(actionID string, ctx *actions.ActionContext) {
+	// Determine if we're in the replace field.
+	inReplace := a.search != nil && a.search.ActiveField == editor.FieldReplace
+
+	// When in replace field, Enter triggers replace-one, not find-next.
+	if inReplace && actionID == "insert.newline" {
+		_ = a.registry.Execute("search.replace", ctx)
+		return
+	}
+
+	// Ctrl+A in search mode → replace all (when replace is visible).
+	if actionID == "select.all" && a.search != nil && a.search.ShowReplace {
+		_ = a.registry.Execute("search.replace_all", ctx)
+		return
+	}
+
+	remap := map[string]string{
+		"insert.char":     "search.char",
+		"delete.backward": "search.backspace",
+		"delete.forward":  "search.delete",
+		"cursor.left":     "search.left",
+		"cursor.right":    "search.right",
+		"cursor.home":     "search.home",
+		"cursor.end":      "search.end",
+		"input.escape":    "search.close",
+		"insert.newline":  "search.next",
+	}
+	if mapped, ok := remap[actionID]; ok {
+		_ = a.registry.Execute(mapped, ctx)
+		return
+	}
+
+	// Allow direct search actions through (F3, Shift+F3).
+	switch actionID {
+	case "search.next", "search.prev", "search.replace", "search.replace_all":
+		_ = a.registry.Execute(actionID, ctx)
+		return
+	}
+
+	// Tab toggles between find/replace fields.
+	if actionID == "insert.char" {
+		if ch, ok := ctx.Event.Payload.(rune); ok && ch == '\t' {
+			_ = a.registry.Execute("search.toggle_replace", ctx)
+			return
+		}
+	}
+
+	// Ignore all other actions while search is open.
 }
 
 // scrollY returns the scroll offset for the active buffer.
@@ -824,6 +884,18 @@ func (a *App) Prompt() *editor.PromptState {
 // SetPrompt sets or clears the prompt state.
 func (a *App) SetPrompt(p *editor.PromptState) {
 	a.prompt = p
+}
+
+// --- Search state interface ---
+
+// SearchState returns the active search state, or nil.
+func (a *App) SearchState() *editor.SearchState {
+	return a.search
+}
+
+// SetSearchState sets or clears the search state.
+func (a *App) SetSearchState(s *editor.SearchState) {
+	a.search = s
 }
 
 // --- LSP support interface ---

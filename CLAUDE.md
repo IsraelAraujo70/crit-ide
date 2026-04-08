@@ -138,7 +138,8 @@ docs/
 - **Syntax highlighting** via tree-sitter (14 languages: Go, Python, JS, TS, Rust, C, CSS, HTML, JSON, MD, TOML, YAML, Bash)
 - **LSP integration** — diagnostics (inline underline), hover (Ctrl+K), go-to-definition (Ctrl+G/F12), format (Ctrl+L)
 - File tree panel (NeoTree-style) on the right side with toggle (Ctrl+B)
-- 47 registered actions (cursor, edit, file, scroll, mouse, clipboard, selection, context menu, file tree, tabs, undo, word-movement, LSP)
+- **Find/Replace** (Ctrl+F) with incremental search, match highlighting, next/prev navigation, replace one/all
+- 61+ registered actions (cursor, edit, file, scroll, mouse, clipboard, selection, context menu, file tree, tabs, undo, word-movement, LSP, search)
 - Mouse: click, double-click, drag-select, wheel scroll, right-click context menu, tab click, tree click
 - Clipboard: Ctrl+C/X/V, system clipboard via atotto/clipboard
 - Tab management: Ctrl+W close, Ctrl+PgDn/PgUp switch, mouse click tabs

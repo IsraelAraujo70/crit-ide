@@ -113,7 +113,8 @@
         { "item": "Auto-indent on Enter (copies leading whitespace)", "status": "done" },
         { "item": "Double-click word selection", "status": "done" },
         { "item": "SelectWord action for programmatic word selection", "status": "done" },
-        { "item": "Block indent/dedent selection (Tab/Shift+Tab)", "status": "done" }
+        { "item": "Block indent/dedent selection (Tab/Shift+Tab)", "status": "done" },
+        { "item": "Find/Replace (Ctrl+F) with match highlighting, next/prev, replace one/all", "status": "done" }
       ]
     },
     {
@@ -197,7 +198,11 @@
     "prompt.char", "prompt.backspace", "prompt.delete",
     "prompt.left", "prompt.right", "prompt.home", "prompt.end",
     "prompt.cancel", "prompt.confirm",
-    "lsp.hover", "lsp.definition", "lsp.format"
+    "lsp.hover", "lsp.definition", "lsp.format",
+    "search.open", "search.close", "search.char", "search.backspace", "search.delete",
+    "search.left", "search.right", "search.home", "search.end",
+    "search.next", "search.prev", "search.toggle_replace",
+    "search.replace", "search.replace_all"
   ],
   "keybindings": {
     "Arrow Up/Down/Left/Right": "cursor movement (or tree nav when tree focused)",
@@ -226,7 +231,14 @@
     "r (tree focused)": "tree.rename — rename at cursor",
     "d (tree focused)": "tree.delete — delete at cursor",
     "Backspace/Delete (tree focused)": "tree.delete",
-    "Escape": "input.escape / tree.focus.editor / prompt.cancel",
+    "Ctrl+F": "search.open — open Find bar (uses selection as query if active)",
+    "F3": "search.next — find next match",
+    "Shift+F3": "search.prev — find previous match",
+    "Tab (in search)": "search.toggle_replace — toggle/switch replace field",
+    "Enter (in search find)": "search.next — find next match",
+    "Enter (in search replace)": "search.replace — replace current match",
+    "Ctrl+A (in search)": "search.replace_all — replace all matches",
+    "Escape": "input.escape / tree.focus.editor / prompt.cancel / search.close",
     "Left click": "mouse.click / tab.click / tree.click (auto-routed by position)",
     "Double click": "select.word — select word under cursor",
     "Left drag": "mouse.drag",
