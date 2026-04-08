@@ -18,6 +18,7 @@ import (
 	"github.com/israelcorrea/crit-ide/internal/logger"
 	"github.com/israelcorrea/crit-ide/internal/lsp"
 	"github.com/israelcorrea/crit-ide/internal/render"
+	"github.com/israelcorrea/crit-ide/internal/search"
 	"github.com/israelcorrea/crit-ide/internal/theme"
 )
 
@@ -1116,11 +1117,44 @@ func (a *App) RunProjectSearch(query string) {
 	if ps == nil {
 		return
 	}
-	ps.Searching = false
+
+	ps.Searching = true
+	root := a.ProjectRoot()
+
+	groups, totalHits := search.Search(query, root)
+
+	// Convert to display entries.
+	flat := search.Flatten(groups)
 	ps.Entries = nil
-	ps.TotalFiles = 0
-	ps.TotalHits = 0
-	a.statusMsg = "Project search not yet implemented"
+	for _, e := range flat {
+		ps.Entries = append(ps.Entries, editor.ProjectSearchEntry{
+			IsHeader: e.IsHeader,
+			Text:     e.Text,
+			Path:     e.Path,
+			Line:     e.Line,
+			Col:      e.Col,
+		})
+	}
+
+	ps.TotalFiles = len(groups)
+	ps.TotalHits = totalHits
+	ps.Searching = false
+	ps.SelectedIdx = 0
+	ps.ScrollY = 0
+
+	// Select first non-header entry if available.
+	for i, entry := range ps.Entries {
+		if !entry.IsHeader {
+			ps.SelectedIdx = i
+			break
+		}
+	}
+
+	if totalHits == 0 {
+		a.statusMsg = "No results found"
+	} else {
+		a.statusMsg = fmt.Sprintf("Found %d matches in %d files", totalHits, len(groups))
+	}
 }
 
 // TriggerCompletion initiates an LSP completion request.

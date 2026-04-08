@@ -91,6 +91,16 @@ func (m *mockApp) CompletionState() *editor.CompletionState    { return nil }
 func (m *mockApp) SetCompletionState(c *editor.CompletionState) {}
 func (m *mockApp) TriggerCompletion(triggerChar string)         {}
 
+// Command palette stubs.
+func (m *mockApp) PaletteState() *editor.PaletteState    { return nil }
+func (m *mockApp) SetPaletteState(p *editor.PaletteState) {}
+
+// Project search stubs.
+func (m *mockApp) ProjectSearchState() *editor.ProjectSearchState      { return nil }
+func (m *mockApp) SetProjectSearchState(ps *editor.ProjectSearchState) {}
+func (m *mockApp) RunProjectSearch(query string)                       {}
+func (m *mockApp) ProjectRoot() string                                 { return "/tmp" }
+
 func newTestContext(app *mockApp, actionID string, payload any) *ActionContext {
 	return &ActionContext{
 		App: app,

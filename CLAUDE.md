@@ -34,6 +34,7 @@ editor    → nothing (pure types)
 events    → nothing (types + channel)
 clipboard → atotto/clipboard (external only)
 filetree  → nothing (os, path/filepath, sort, strings)
+search    → nothing (os/exec, bufio, regexp, strconv, strings, path/filepath)
 actions   → editor, events
 input     → events, tcell
 render    → editor, tcell
@@ -140,7 +141,8 @@ docs/
 - File tree panel (NeoTree-style) on the right side with toggle (Ctrl+B)
 - **Find/Replace** (Ctrl+F) with incremental search, match highlighting, next/prev navigation, replace one/all
 - **Fuzzy File Finder** (Ctrl+P) — Telescope-style popup with score-based fuzzy matching, match highlighting, .gitignore support, file cache
-- 78+ registered actions (cursor, edit, file, scroll, mouse, clipboard, selection, context menu, file tree, tabs, undo, word-movement, LSP, search, finder, completion)
+- **Project Search** (Ctrl+Shift+F / F5) — project-wide grep/ripgrep search, results grouped by file, navigate to match
+- 90+ registered actions (cursor, edit, file, scroll, mouse, clipboard, selection, context menu, file tree, tabs, undo, word-movement, LSP, search, finder, completion, project search)
 - Mouse: click, double-click, drag-select, wheel scroll, right-click context menu, tab click, tree click
 - Clipboard: Ctrl+C/X/V, system clipboard via atotto/clipboard
 - Tab management: Ctrl+W close, Ctrl+PgDn/PgUp switch, mouse click tabs
