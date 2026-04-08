@@ -290,4 +290,10 @@ func RegisterAll(r *Registry) {
 
 	// Completion (Ctrl+Space / auto-trigger).
 	RegisterCompletionActions(r)
+
+	// Command palette (F1 / Ctrl+Shift+P).
+	RegisterPaletteActions(r)
+
+	// Project search (F5 / Ctrl+Shift+F).
+	RegisterProjectSearchActions(r)
 }

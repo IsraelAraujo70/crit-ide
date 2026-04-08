@@ -118,7 +118,8 @@
         { "item": "SelectWord action for programmatic word selection", "status": "done" },
         { "item": "Block indent/dedent selection (Tab/Shift+Tab)", "status": "done" },
         { "item": "Find/Replace (Ctrl+F) with match highlighting, next/prev, replace one/all", "status": "done" },
-        { "item": "Fuzzy File Finder (Ctrl+P) — Telescope-style popup, score-based fuzzy matching, .gitignore, file cache", "status": "done" }
+        { "item": "Fuzzy File Finder (Ctrl+P) — Telescope-style popup, score-based fuzzy matching, .gitignore, file cache", "status": "done" },
+        { "item": "Project-wide Search (Ctrl+Shift+F / F5) — grep/ripgrep search, results grouped by file, navigate to match", "status": "done" }
       ]
     },
     {
@@ -142,7 +143,7 @@
         { "item": "Configurable keymap engine (TOML-based)", "status": "planned" },
         { "item": "Context-aware keybinding resolution", "status": "planned" },
         { "item": "Chord/leader key support", "status": "planned" },
-        { "item": "Command palette popup", "status": "planned" },
+        { "item": "Command palette popup (F1 / Ctrl+Shift+P) — centered popup with fuzzy filter, category grouping, keybinding display", "status": "done" },
         { "item": "Fuzzy file finder", "status": "done" }
       ]
     },
@@ -211,7 +212,15 @@
     "finder.left", "finder.right", "finder.home", "finder.end",
     "finder.up", "finder.down", "finder.confirm",
     "completion.trigger", "completion.accept", "completion.dismiss",
-    "completion.up", "completion.down"
+    "completion.up", "completion.down",
+    "palette.open", "palette.close", "palette.char", "palette.backspace",
+    "palette.delete", "palette.left", "palette.right", "palette.home",
+    "palette.end", "palette.up", "palette.down", "palette.execute",
+    "project.search", "project.search_close", "project.search_char",
+    "project.search_backspace", "project.search_delete",
+    "project.search_left", "project.search_right", "project.search_home", "project.search_end",
+    "project.search_execute", "project.search_up", "project.search_down",
+    "project.search_open_result", "project.search_next"
   ],
   "keybindings": {
     "Arrow Up/Down/Left/Right": "cursor movement (or tree nav when tree focused)",
@@ -261,6 +270,16 @@
     "Enter/Tab (in completion)": "completion.accept — insert selected completion",
     "Up/Down (in completion)": "completion.up/down — navigate completion items",
     "Escape (in completion)": "completion.dismiss — close completion popup",
-    ". (auto-trigger)": "completion auto-trigger on LSP trigger characters"
+    ". (auto-trigger)": "completion auto-trigger on LSP trigger characters",
+    "F1 / Ctrl+Shift+P": "palette.open — open command palette",
+    "Enter (in palette)": "palette.execute — execute selected command",
+    "Up/Down (in palette)": "palette.up/down — navigate commands",
+    "Escape (in palette)": "palette.close — close command palette",
+    "Ctrl+Shift+F / F5": "project.search — open project-wide search",
+    "Enter (in project search, no results)": "project.search_execute — run search",
+    "Enter (in project search, on result)": "project.search_open_result — open file at match",
+    "Up/Down (in project search)": "project.search_up/down — navigate results",
+    "F3 (in project search)": "project.search_next — jump to next match result",
+    "Escape (in project search)": "project.search_close — close project search"
   }
 }

@@ -17,6 +17,8 @@ const (
 	ModeSearch                       // Find/Replace bar is active.
 	ModeFileFinder                   // Fuzzy file finder popup is active.
 	ModeCompletion                   // Autocomplete popup is active.
+	ModeCommandPalette               // Command palette popup is active.
+	ModeProjectSearch                // Project-wide search panel is active.
 )
 
 // FocusArea indicates which panel currently has keyboard focus.
@@ -119,6 +121,16 @@ type AppState interface {
 	CompletionState() *editor.CompletionState
 	SetCompletionState(c *editor.CompletionState)
 	TriggerCompletion(triggerChar string)
+
+	// Command palette.
+	PaletteState() *editor.PaletteState
+	SetPaletteState(p *editor.PaletteState)
+
+	// Project search.
+	ProjectSearchState() *editor.ProjectSearchState
+	SetProjectSearchState(ps *editor.ProjectSearchState)
+	RunProjectSearch(query string)
+	ProjectRoot() string
 }
 
 // ActionContext carries everything an action needs to execute.

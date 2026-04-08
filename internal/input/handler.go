@@ -214,14 +214,32 @@ func (h *Handler) handleKey(ev *tcell.EventKey) {
 		}
 	}
 
+	// Ctrl+Shift+P → command palette (when terminal supports it).
+	if ev.Modifiers()&tcell.ModCtrl != 0 && ev.Modifiers()&tcell.ModShift != 0 {
+		if ev.Key() == tcell.KeyRune && (ev.Rune() == 'P' || ev.Rune() == 'p') {
+			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "palette.open"})
+			return
+		}
+		if ev.Key() == tcell.KeyRune && (ev.Rune() == 'F' || ev.Rune() == 'f') {
+			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "project.search"})
+			return
+		}
+	}
+
 	// Function keys.
 	switch ev.Key() {
+	case tcell.KeyF1:
+		h.bus.Send(events.Event{Type: events.EventAction, ActionID: "palette.open"})
+		return
 	case tcell.KeyF3:
 		if ev.Modifiers()&tcell.ModShift != 0 {
 			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "search.prev"})
 		} else {
 			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "search.next"})
 		}
+		return
+	case tcell.KeyF5:
+		h.bus.Send(events.Event{Type: events.EventAction, ActionID: "project.search"})
 		return
 	case tcell.KeyF12:
 		h.bus.Send(events.Event{Type: events.EventAction, ActionID: "lsp.definition"})

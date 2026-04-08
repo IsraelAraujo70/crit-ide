@@ -63,6 +63,12 @@ type App struct {
 	// Completion.
 	completion *editor.CompletionState
 
+	// Command palette.
+	palette *editor.PaletteState
+
+	// Project search.
+	projectSearch *editor.ProjectSearchState
+
 	// Syntax highlighting.
 	highlighter          *highlight.TreeSitterHighlighter
 	langReg              *highlight.TSLangRegistry
@@ -143,10 +149,10 @@ func (a *App) Run() error {
 	a.initFileTree()
 
 	// Initialize fuzzy file finder cache.
-	a.fileFinder = fuzzy.NewFileFinder(a.projectRoot())
+	a.fileFinder = fuzzy.NewFileFinder(a.ProjectRoot())
 
 	// Initialize LSP manager.
-	rootPath := a.projectRoot()
+	rootPath := a.ProjectRoot()
 	a.lspManager = lsp.NewManager(a.bus, rootPath)
 	defer a.lspManager.StopAll()
 
@@ -185,6 +191,10 @@ func (a *App) Run() error {
 				a.handleFinderAction(ev.ActionID, ctx)
 			case actions.ModeCompletion:
 				a.handleCompletionAction(ev.ActionID, ctx)
+			case actions.ModeCommandPalette:
+				a.handlePaletteAction(ev.ActionID, ctx)
+			case actions.ModeProjectSearch:
+				a.handleProjectSearchAction(ev.ActionID, ctx)
 			}
 
 			// Execute any pending action (from menu item execution).
@@ -284,7 +294,7 @@ func (a *App) handleNormalAction(actionID string, ctx *actions.ActionContext) {
 	switch actionID {
 	case "tree.toggle", "tab.next", "tab.prev", "tab.close", "app.quit",
 		"file.save", "tree.refresh", "edit.undo", "edit.redo",
-		"search.open", "finder.open", "completion.trigger":
+		"search.open", "finder.open", "completion.trigger", "palette.open", "project.search":
 		_ = a.registry.Execute(actionID, ctx)
 		return
 	}
@@ -483,6 +493,12 @@ func (a *App) render() {
 	if a.completion != nil {
 		vs.Completion = a.completion
 	}
+	if a.palette != nil {
+		vs.Palette = a.palette
+	}
+	if a.projectSearch != nil {
+		vs.ProjectSearch = a.projectSearch
+	}
 
 	// Build tab info.
 	for i, b := range a.buffers {
@@ -678,6 +694,70 @@ func (a *App) handleFinderAction(actionID string, ctx *actions.ActionContext) {
 		return
 	}
 	// Ignore all other actions while finder is open.
+}
+
+// handlePaletteAction routes actions while the command palette is active.
+func (a *App) handlePaletteAction(actionID string, ctx *actions.ActionContext) {
+	remap := map[string]string{
+		"insert.char":     "palette.char",
+		"delete.backward": "palette.backspace",
+		"delete.forward":  "palette.delete",
+		"cursor.left":     "palette.left",
+		"cursor.right":    "palette.right",
+		"cursor.home":     "palette.home",
+		"cursor.end":      "palette.end",
+		"cursor.up":       "palette.up",
+		"cursor.down":     "palette.down",
+		"input.escape":    "palette.close",
+		"insert.newline":  "palette.execute",
+	}
+	if mapped, ok := remap[actionID]; ok {
+		_ = a.registry.Execute(mapped, ctx)
+		return
+	}
+	// Ignore all other actions while palette is open.
+}
+
+// handleProjectSearchAction routes actions while the project search panel is active.
+func (a *App) handleProjectSearchAction(actionID string, ctx *actions.ActionContext) {
+	ps := a.projectSearch
+
+	// Enter behavior depends on whether results exist and are selected.
+	if actionID == "insert.newline" {
+		if ps != nil && ps.HasResults() {
+			// If a result is selected, open it.
+			_ = a.registry.Execute("project.search_open_result", ctx)
+		} else {
+			// Otherwise, execute the search.
+			_ = a.registry.Execute("project.search_execute", ctx)
+		}
+		return
+	}
+
+	remap := map[string]string{
+		"insert.char":     "project.search_char",
+		"delete.backward": "project.search_backspace",
+		"delete.forward":  "project.search_delete",
+		"cursor.left":     "project.search_left",
+		"cursor.right":    "project.search_right",
+		"cursor.home":     "project.search_home",
+		"cursor.end":      "project.search_end",
+		"cursor.up":       "project.search_up",
+		"cursor.down":     "project.search_down",
+		"input.escape":    "project.search_close",
+	}
+	if mapped, ok := remap[actionID]; ok {
+		_ = a.registry.Execute(mapped, ctx)
+		return
+	}
+
+	// F3 navigates to next result.
+	if actionID == "search.next" {
+		_ = a.registry.Execute("project.search_next", ctx)
+		return
+	}
+
+	// Ignore all other actions while project search is open.
 }
 
 // scrollY returns the scroll offset for the active buffer.
@@ -1009,6 +1089,40 @@ func (a *App) SetCompletionState(c *editor.CompletionState) {
 	a.completion = c
 }
 
+// PaletteState returns the current command palette state (nil if not active).
+func (a *App) PaletteState() *editor.PaletteState {
+	return a.palette
+}
+
+// SetPaletteState sets or clears the command palette state.
+func (a *App) SetPaletteState(p *editor.PaletteState) {
+	a.palette = p
+}
+
+// ProjectSearchState returns the active project search state, or nil.
+func (a *App) ProjectSearchState() *editor.ProjectSearchState {
+	return a.projectSearch
+}
+
+// SetProjectSearchState sets or clears the project search state.
+func (a *App) SetProjectSearchState(ps *editor.ProjectSearchState) {
+	a.projectSearch = ps
+}
+
+// RunProjectSearch executes a project-wide search and populates results.
+// TODO: Full implementation pending search package.
+func (a *App) RunProjectSearch(query string) {
+	ps := a.projectSearch
+	if ps == nil {
+		return
+	}
+	ps.Searching = false
+	ps.Entries = nil
+	ps.TotalFiles = 0
+	ps.TotalHits = 0
+	a.statusMsg = "Project search not yet implemented"
+}
+
 // TriggerCompletion initiates an LSP completion request.
 func (a *App) TriggerCompletion(triggerChar string) {
 	buf := a.ActiveBuffer()
@@ -1268,7 +1382,7 @@ func (a *App) detectLanguage(buf *editor.Buffer) {
 // --- LSP helpers ---
 
 // projectRoot returns the project root directory.
-func (a *App) projectRoot() string {
+func (a *App) ProjectRoot() string {
 	if a.filePath != "" {
 		absPath, _ := filepath.Abs(a.filePath)
 		return filepath.Dir(absPath)
