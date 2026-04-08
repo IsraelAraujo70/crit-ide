@@ -112,7 +112,8 @@
         { "item": "Duplicate line (Ctrl+D)", "status": "done" },
         { "item": "Auto-indent on Enter (copies leading whitespace)", "status": "done" },
         { "item": "Double-click word selection", "status": "done" },
-        { "item": "SelectWord action for programmatic word selection", "status": "done" }
+        { "item": "SelectWord action for programmatic word selection", "status": "done" },
+        { "item": "Block indent/dedent selection (Tab/Shift+Tab)", "status": "done" }
       ]
     },
     {
@@ -182,7 +183,7 @@
     "cursor.word_left", "cursor.word_right",
     "insert.char", "insert.newline",
     "delete.backward", "delete.forward",
-    "edit.undo", "edit.redo", "edit.duplicate_line",
+    "edit.undo", "edit.redo", "edit.duplicate_line", "edit.indent", "edit.dedent",
     "file.save", "app.quit",
     "scroll.up", "scroll.down",
     "mouse.click", "mouse.scroll", "mouse.drag",
@@ -205,7 +206,8 @@
     "PageUp / PageDown": "scroll.up / scroll.down",
     "Enter": "insert.newline (with auto-indent; or tree.enter when tree focused)",
     "Backspace / Delete": "delete.backward / delete.forward",
-    "Tab": "insert.char (tab)",
+    "Tab": "edit.indent (indent selection) / insert.char (tab when no selection)",
+    "Shift+Tab": "edit.dedent (dedent selection)",
     "Ctrl+S": "file.save",
     "Ctrl+Q": "app.quit",
     "Ctrl+Z": "edit.undo",

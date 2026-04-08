@@ -187,6 +187,9 @@ func (h *Handler) handleKey(ev *tcell.EventKey) {
 		case tcell.KeyCtrlD:
 			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "edit.duplicate_line"})
 			return
+		case tcell.KeyCtrlF:
+			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "search.open"})
+			return
 		}
 	}
 
@@ -204,6 +207,13 @@ func (h *Handler) handleKey(ev *tcell.EventKey) {
 
 	// Function keys.
 	switch ev.Key() {
+	case tcell.KeyF3:
+		if ev.Modifiers()&tcell.ModShift != 0 {
+			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "search.prev"})
+		} else {
+			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "search.next"})
+		}
+		return
 	case tcell.KeyF12:
 		h.bus.Send(events.Event{Type: events.EventAction, ActionID: "lsp.definition"})
 		return
@@ -247,8 +257,10 @@ func (h *Handler) handleKey(ev *tcell.EventKey) {
 		h.bus.Send(events.Event{Type: events.EventAction, ActionID: "delete.forward"})
 	case tcell.KeyEscape:
 		h.bus.Send(events.Event{Type: events.EventAction, ActionID: "input.escape"})
+	case tcell.KeyBacktab:
+		h.bus.Send(events.Event{Type: events.EventAction, ActionID: "edit.dedent"})
 	case tcell.KeyTab:
-		h.bus.Send(events.Event{Type: events.EventAction, ActionID: "insert.char", Payload: '\t'})
+		h.bus.Send(events.Event{Type: events.EventAction, ActionID: "edit.indent"})
 	case tcell.KeyRune:
 		h.bus.Send(events.Event{Type: events.EventAction, ActionID: "insert.char", Payload: ev.Rune()})
 	}

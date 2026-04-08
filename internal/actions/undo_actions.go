@@ -46,6 +46,30 @@ func (a *duplicateLine) Run(ctx *ActionContext) error {
 	return nil
 }
 
+// --- Indent/Dedent actions ---
+
+type indentSelection struct{}
+
+func (a *indentSelection) ID() string { return "edit.indent" }
+func (a *indentSelection) Run(ctx *ActionContext) error {
+	buf := ctx.App.ActiveBuffer()
+	if buf.HasSelection() {
+		buf.IndentSelection()
+	} else {
+		// No selection: insert a tab character (normal Tab behavior).
+		buf.InsertChar('\t')
+	}
+	return nil
+}
+
+type dedentSelection struct{}
+
+func (a *dedentSelection) ID() string { return "edit.dedent" }
+func (a *dedentSelection) Run(ctx *ActionContext) error {
+	ctx.App.ActiveBuffer().DedentSelection()
+	return nil
+}
+
 // --- Double-click word select ---
 
 type selectWord struct{}

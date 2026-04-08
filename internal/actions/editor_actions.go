@@ -262,6 +262,26 @@ func RegisterAll(r *Registry) {
 	// Line operations.
 	r.Register(&duplicateLine{})
 
+	// Indent/Dedent.
+	r.Register(&indentSelection{})
+	r.Register(&dedentSelection{})
+
 	// Word selection.
 	r.Register(&selectWord{})
+
+	// Search / Find & Replace.
+	r.Register(&searchOpen{})
+	r.Register(&searchClose{})
+	r.Register(&searchChar{})
+	r.Register(&searchBackspace{})
+	r.Register(&searchDelete{})
+	r.Register(&searchLeft{})
+	r.Register(&searchRight{})
+	r.Register(&searchHome{})
+	r.Register(&searchEnd{})
+	r.Register(&searchNext{})
+	r.Register(&searchPrev{})
+	r.Register(&searchToggleReplace{})
+	r.Register(&searchReplace{})
+	r.Register(&searchReplaceAll{})
 }

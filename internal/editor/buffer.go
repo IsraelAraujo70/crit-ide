@@ -714,6 +714,191 @@ func (b *Buffer) SelectWord() {
 	}
 }
 
+// IndentSelection adds a tab character at the beginning of each line in the
+// current selection. The operation is recorded as a single undo entry (one
+// delete of the original block + one insert of the indented block).
+// The selection is preserved and adjusted to cover the indented text.
+func (b *Buffer) IndentSelection() {
+	if b.ReadOnly || !b.HasSelection() {
+		return
+	}
+	r := b.Selection.Normalized()
+	startLine := r.Start.Line
+	endLine := r.End.Line
+	// If selection ends at column 0 of a line, don't indent that line
+	// (the cursor is at the very start, no content selected on that line).
+	if r.End.Col == 0 && endLine > startLine {
+		endLine--
+	}
+
+	// Capture original block text (full lines from startLine to endLine).
+	oldStart := Position{startLine, 0}
+	lastLineLen := len(b.Text.Line(endLine))
+	oldEnd := Position{endLine, lastLineLen}
+	oldText := b.Text.Slice(Range{Start: oldStart, End: oldEnd})
+
+	// Build indented version.
+	var newLines []string
+	for i := startLine; i <= endLine; i++ {
+		newLines = append(newLines, "\t"+b.Text.Line(i))
+	}
+	newText := strings.Join(newLines, "\n")
+
+	// Record undo: delete old block, insert new block.
+	// We push two entries so that undo reverses both in order.
+	// Push insert first (will be undone last), then delete (undone first).
+	b.Undo.Push(UndoEntry{
+		Kind:      EditDelete,
+		Pos:       oldStart,
+		Text:      oldText,
+		CursorRow: b.CursorRow,
+		CursorCol: b.CursorCol,
+	})
+
+	// Replace old text with new text.
+	_ = b.Text.Delete(Range{Start: oldStart, End: oldEnd})
+	_ = b.Text.Insert(oldStart, newText)
+
+	b.Undo.undos[len(b.Undo.undos)-1] = UndoEntry{
+		Kind:      EditDelete,
+		Pos:       oldStart,
+		Text:      oldText,
+		CursorRow: b.CursorRow,
+		CursorCol: b.CursorCol,
+	}
+	// Push the insert entry on top so undo pops it first.
+	b.Undo.undos = append(b.Undo.undos, UndoEntry{
+		Kind:      EditInsert,
+		Pos:       oldStart,
+		Text:      newText,
+		CursorRow: b.CursorRow,
+		CursorCol: b.CursorCol,
+	})
+	// Clear redo since we manually appended.
+	b.Undo.redos = b.Undo.redos[:0]
+
+	// Adjust selection: each line got 1 byte ("\t") prepended.
+	newAnchor := b.Selection.Anchor
+	newCursor := b.Selection.Cursor
+	if newAnchor.Line >= startLine && newAnchor.Line <= endLine {
+		newAnchor.Col += 1
+	}
+	if newCursor.Line >= startLine && newCursor.Line <= endLine {
+		newCursor.Col += 1
+	}
+	b.SetSelection(newAnchor, newCursor)
+	b.CursorRow = newCursor.Line
+	b.CursorCol = newCursor.Col
+	b.desiredCol = b.CursorCol
+	b.Dirty = true
+}
+
+// DedentSelection removes one level of indentation (one tab or up to 4 spaces)
+// from the beginning of each line in the current selection.
+// The operation is recorded as a single undo entry.
+// The selection is preserved and adjusted.
+func (b *Buffer) DedentSelection() {
+	if b.ReadOnly || !b.HasSelection() {
+		return
+	}
+	r := b.Selection.Normalized()
+	startLine := r.Start.Line
+	endLine := r.End.Line
+	if r.End.Col == 0 && endLine > startLine {
+		endLine--
+	}
+
+	// Capture original block text.
+	oldStart := Position{startLine, 0}
+	lastLineLen := len(b.Text.Line(endLine))
+	oldEnd := Position{endLine, lastLineLen}
+	oldText := b.Text.Slice(Range{Start: oldStart, End: oldEnd})
+
+	// Build dedented version and track how many bytes removed per line.
+	removed := make([]int, endLine-startLine+1)
+	var newLines []string
+	for i := startLine; i <= endLine; i++ {
+		line := b.Text.Line(i)
+		idx := i - startLine
+		if len(line) > 0 && line[0] == '\t' {
+			removed[idx] = 1
+			newLines = append(newLines, line[1:])
+		} else {
+			// Remove up to 4 leading spaces.
+			spaces := 0
+			for spaces < 4 && spaces < len(line) && line[spaces] == ' ' {
+				spaces++
+			}
+			removed[idx] = spaces
+			newLines = append(newLines, line[spaces:])
+		}
+	}
+
+	// Check if any line was actually dedented.
+	anyRemoved := false
+	for _, r := range removed {
+		if r > 0 {
+			anyRemoved = true
+			break
+		}
+	}
+	if !anyRemoved {
+		return
+	}
+
+	newText := strings.Join(newLines, "\n")
+
+	// Record undo entries (same pattern as IndentSelection).
+	b.Undo.Push(UndoEntry{
+		Kind:      EditDelete,
+		Pos:       oldStart,
+		Text:      oldText,
+		CursorRow: b.CursorRow,
+		CursorCol: b.CursorCol,
+	})
+	_ = b.Text.Delete(Range{Start: oldStart, End: oldEnd})
+	_ = b.Text.Insert(oldStart, newText)
+
+	b.Undo.undos[len(b.Undo.undos)-1] = UndoEntry{
+		Kind:      EditDelete,
+		Pos:       oldStart,
+		Text:      oldText,
+		CursorRow: b.CursorRow,
+		CursorCol: b.CursorCol,
+	}
+	b.Undo.undos = append(b.Undo.undos, UndoEntry{
+		Kind:      EditInsert,
+		Pos:       oldStart,
+		Text:      newText,
+		CursorRow: b.CursorRow,
+		CursorCol: b.CursorCol,
+	})
+	b.Undo.redos = b.Undo.redos[:0]
+
+	// Adjust selection columns.
+	newAnchor := b.Selection.Anchor
+	newCursor := b.Selection.Cursor
+	if newAnchor.Line >= startLine && newAnchor.Line <= endLine {
+		rem := removed[newAnchor.Line-startLine]
+		newAnchor.Col -= rem
+		if newAnchor.Col < 0 {
+			newAnchor.Col = 0
+		}
+	}
+	if newCursor.Line >= startLine && newCursor.Line <= endLine {
+		rem := removed[newCursor.Line-startLine]
+		newCursor.Col -= rem
+		if newCursor.Col < 0 {
+			newCursor.Col = 0
+		}
+	}
+	b.SetSelection(newAnchor, newCursor)
+	b.CursorRow = newCursor.Line
+	b.CursorCol = newCursor.Col
+	b.desiredCol = b.CursorCol
+	b.Dirty = true
+}
+
 // FileName returns the base name of the file, or "[scratch]" for scratch buffers.
 func (b *Buffer) FileName() string {
 	if b.Path == "" {
