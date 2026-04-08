@@ -10,6 +10,15 @@ type TerminalState struct {
 	TabNames     []string // Display names for session tabs.
 	TabClosed    []bool   // Whether each session is closed.
 	Focused      bool     // Whether the terminal panel has keyboard focus.
+	CursorRow    int      // Cursor row relative to grid (0-based).
+	CursorCol    int      // Cursor column (0-based).
+	GridRows     int      // Number of rows in the terminal grid.
+	// Selection (nil if none).
+	SelStartLine int
+	SelStartCol  int
+	SelEndLine   int
+	SelEndCol    int
+	HasSelection bool
 }
 
 // ScrollUp scrolls the terminal output up by n lines.

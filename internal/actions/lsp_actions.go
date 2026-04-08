@@ -36,13 +36,15 @@ func (a *lspDefinition) Run(ctx *ActionContext) error {
 		return nil
 	}
 	srv, ok := srvAny.(*lsp.Server)
-	if !ok {
+	if !ok || srv == nil {
+		ctx.App.SetStatusMessage("LSP: server not ready")
 		return nil
 	}
 	uri := lsp.URIFromPath(buf.Path)
 	lineContent := buf.Text.Line(buf.CursorRow)
 	pos := lsp.EditorToLSPPosition(buf.CursorRow, buf.CursorCol, lineContent)
 	srv.Definition(uri, pos)
+	ctx.App.SetStatusMessage("LSP: go to definition...")
 	return nil
 }
 
@@ -63,7 +65,7 @@ func (a *lspHover) Run(ctx *ActionContext) error {
 		return nil
 	}
 	srv, ok := srvAny.(*lsp.Server)
-	if !ok {
+	if !ok || srv == nil {
 		return nil
 	}
 	uri := lsp.URIFromPath(buf.Path)
@@ -90,7 +92,7 @@ func (a *lspFormat) Run(ctx *ActionContext) error {
 		return nil
 	}
 	srv, ok := srvAny.(*lsp.Server)
-	if !ok {
+	if !ok || srv == nil {
 		return nil
 	}
 	uri := lsp.URIFromPath(buf.Path)
@@ -115,7 +117,7 @@ func (a *lspRename) Run(ctx *ActionContext) error {
 		return nil
 	}
 	srv, ok := srvAny.(*lsp.Server)
-	if !ok {
+	if !ok || srv == nil {
 		return nil
 	}
 	if !srv.HasRenameProvider() {
@@ -181,7 +183,7 @@ func (a *lspCodeAction) Run(ctx *ActionContext) error {
 		return nil
 	}
 	srv, ok := srvAny.(*lsp.Server)
-	if !ok {
+	if !ok || srv == nil {
 		return nil
 	}
 	if !srv.HasCodeActionProvider() {
@@ -213,7 +215,7 @@ func (a *lspSignatureHelp) Run(ctx *ActionContext) error {
 		return nil
 	}
 	srv, ok := srvAny.(*lsp.Server)
-	if !ok {
+	if !ok || srv == nil {
 		return nil
 	}
 	uri := lsp.URIFromPath(buf.Path)

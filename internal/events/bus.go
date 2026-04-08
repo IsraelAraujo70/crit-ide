@@ -17,7 +17,15 @@ const (
 	EventLSPCodeAction                   // LSP code action result. Payload: *lsp.CodeActionPayload.
 	EventLSPSignatureHelp                // LSP signature help result. Payload: *lsp.SignatureHelpPayload.
 	EventTerminalOutput                  // Terminal output received. Payload: int (session ID).
+	EventTerminalKey                     // Raw key event for terminal. Payload: TerminalKeyPayload.
 )
+
+// TerminalKeyPayload carries a raw key event for forwarding to the PTY.
+type TerminalKeyPayload struct {
+	Key       int32  // tcell.Key value.
+	Rune      rune   // Unicode character (for KeyRune).
+	Modifiers int32  // tcell.ModMask value.
+}
 
 // Event is the message passed through the event bus.
 type Event struct {

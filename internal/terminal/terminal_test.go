@@ -99,6 +99,10 @@ func TestSession_Resize(t *testing.T) {
 
 	// Resize should not panic or error.
 	s.Resize(120, 40)
+
+	if s.GridRows() != 40 {
+		t.Errorf("expected 40 rows after resize, got %d", s.GridRows())
+	}
 }
 
 func TestSession_Close(t *testing.T) {
@@ -141,70 +145,111 @@ func TestSession_DisplayName(t *testing.T) {
 	}
 }
 
-func TestSession_LineCount(t *testing.T) {
+// newTestSession creates a Session with a grid for unit tests (no PTY).
+func newTestSession(cols, rows int) *Session {
 	s := &Session{
-		lines:   []string{"line1", "line2", "line3"},
-		current: "partial",
+		cols: cols,
+		rows: rows,
 	}
-	if s.LineCount() != 4 {
-		t.Errorf("expected 4 lines (3 + current), got %d", s.LineCount())
-	}
-
-	s2 := &Session{
-		lines:   []string{"line1"},
-		current: "",
-	}
-	if s2.LineCount() != 1 {
-		t.Errorf("expected 1 line, got %d", s2.LineCount())
-	}
+	s.initGrid()
+	return s
 }
 
-func TestProcessOutput(t *testing.T) {
-	s := &Session{
-		lines: make([]string, 0),
-	}
+func TestProcessOutput_Newlines(t *testing.T) {
+	s := newTestSession(80, 24)
 
-	// Process output with newlines.
-	s.processOutput("hello\nworld\n")
+	s.processBytes([]byte("hello\nworld\n"))
 
-	if len(s.lines) != 2 {
-		t.Fatalf("expected 2 lines, got %d: %v", len(s.lines), s.lines)
+	lines := s.Lines()
+	// "hello" should be in scrollback or grid. Check that both appear.
+	found := 0
+	for i, l := range lines {
+		if strings.Contains(l, "hello") || strings.Contains(l, "world") {
+			found++
+		} else if strings.TrimSpace(l) != "" {
+			t.Logf("line[%d] = %q", i, l)
+		}
 	}
-	if s.lines[0] != "hello" {
-		t.Errorf("expected first line 'hello', got %q", s.lines[0])
-	}
-	if s.lines[1] != "world" {
-		t.Errorf("expected second line 'world', got %q", s.lines[1])
-	}
-	if s.current != "" {
-		t.Errorf("expected empty current line, got %q", s.current)
+	if found < 2 {
+		t.Errorf("expected to find 'hello' and 'world' in lines (found %d): %q", found, lines)
 	}
 }
 
 func TestProcessOutput_CRLF(t *testing.T) {
-	s := &Session{
-		lines: make([]string, 0),
-	}
+	s := newTestSession(80, 24)
 
-	s.processOutput("hello\r\nworld\r\n")
+	s.processBytes([]byte("hello\r\nworld\r\n"))
 
-	if len(s.lines) != 2 {
-		t.Fatalf("expected 2 lines, got %d: %v", len(s.lines), s.lines)
+	lines := s.Lines()
+	found := 0
+	for _, l := range lines {
+		if strings.Contains(l, "hello") || strings.Contains(l, "world") {
+			found++
+		}
 	}
-	if s.lines[0] != "hello" {
-		t.Errorf("expected first line 'hello', got %q", s.lines[0])
+	if found < 2 {
+		t.Errorf("expected to find 'hello' and 'world' in lines (found %d): %q", found, lines)
 	}
 }
 
 func TestProcessOutput_CarriageReturn(t *testing.T) {
-	s := &Session{
-		lines: make([]string, 0),
+	s := newTestSession(80, 24)
+
+	// Write "loading..." then CR then "Done!" — should overwrite.
+	s.processBytes([]byte("loading...\rDone!"))
+
+	row := s.renderGridRow(0)
+	if !strings.HasPrefix(row, "Done!") {
+		t.Errorf("expected row to start with 'Done!', got %q", row)
 	}
+}
 
-	// CR without LF: overwrite current line.
-	s.processOutput("loading...\rDone!     ")
+func TestProcessOutput_Backspace(t *testing.T) {
+	s := newTestSession(80, 24)
 
-	if s.current != "Done!     " {
-		t.Errorf("expected current line 'Done!     ', got %q", s.current)
+	// Write "abc" then backspace — cursor should move back.
+	s.processBytes([]byte("abc\x08"))
+
+	_, col := s.CursorPos()
+	if col != 2 {
+		t.Errorf("expected cursor at col 2 after backspace, got %d", col)
+	}
+}
+
+func TestProcessOutput_CursorMovement(t *testing.T) {
+	s := newTestSession(80, 24)
+
+	// Move cursor to row 5, col 10 using CSI H.
+	s.processBytes([]byte("\x1b[5;10H"))
+
+	row, col := s.CursorPos()
+	if row != 4 || col != 9 { // 0-based
+		t.Errorf("expected cursor at (4,9), got (%d,%d)", row, col)
+	}
+}
+
+func TestProcessOutput_EraseDisplay(t *testing.T) {
+	s := newTestSession(80, 24)
+
+	// Write some text then clear screen.
+	s.processBytes([]byte("hello world"))
+	s.processBytes([]byte("\x1b[2J"))
+
+	row := s.renderGridRow(0)
+	if strings.TrimSpace(row) != "" {
+		t.Errorf("expected empty grid after erase, got %q", row)
+	}
+}
+
+func TestProcessOutput_EraseLine(t *testing.T) {
+	s := newTestSession(80, 24)
+
+	s.processBytes([]byte("hello world"))
+	// Move cursor to col 5, erase from cursor to end.
+	s.processBytes([]byte("\x1b[1;6H\x1b[K"))
+
+	row := s.renderGridRow(0)
+	if row != "hello" {
+		t.Errorf("expected 'hello' after erase to EOL, got %q", row)
 	}
 }

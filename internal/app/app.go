@@ -108,6 +108,20 @@ type App struct {
 	termVisible     bool
 	termHeight      int  // Height in rows (default: 1/3 of screen).
 	nextTermID      int  // Monotonic counter for session IDs.
+
+	// Input handler reference (for terminal raw mode).
+	inputHandler *input.Handler
+
+	// Terminal text selection.
+	termSelection *TermSelection
+}
+
+// TermSelection represents a text selection in the terminal panel.
+type TermSelection struct {
+	StartLine int // Line index in Lines() output.
+	StartCol  int // Column (rune offset).
+	EndLine   int
+	EndCol    int
 }
 
 // New creates a new App. If filePath is non-empty, that file will be opened.
@@ -193,8 +207,8 @@ func (a *App) Run() error {
 	a.lastContent[a.ActiveBuffer().ID] = a.ActiveBuffer().Text.Content()
 
 	// Launch input goroutine.
-	inputHandler := input.NewHandler(a.screen, a.bus)
-	go inputHandler.Run()
+	a.inputHandler = input.NewHandler(a.screen, a.bus)
+	go a.inputHandler.Run()
 
 	// Initial render.
 	a.render()
@@ -208,6 +222,46 @@ func (a *App) Run() error {
 			ctx := &actions.ActionContext{
 				App:   a,
 				Event: &ev,
+			}
+
+			// Mouse events are always routed globally, regardless of input mode.
+			if ev.ActionID == "mouse.click" {
+				a.routeMouseClick(ctx)
+				a.render()
+				continue
+			}
+			if ev.ActionID == "mouse.drag" {
+				if dp, ok := ev.Payload.(events.MouseDragPayload); ok {
+					// Determine drag target by anchor position, not focus state.
+					_, h := a.screen.Size()
+					inTerminal := false
+					if a.termVisible && len(a.termSessions) > 0 {
+						termStartY := h - 1 - a.termHeight
+						if termStartY < 1 {
+							termStartY = 1
+						}
+						if dp.AnchorY >= termStartY {
+							inTerminal = true
+							// Ensure terminal is focused on first drag.
+							if a.termSelection == nil {
+								a.SetFocusArea(actions.FocusTerminal)
+								a.SetInputMode(actions.ModeTerminal)
+								a.termStartSelection(dp.AnchorX, dp.AnchorY, termStartY)
+							}
+							a.termUpdateSelection(dp.CurrentX, dp.CurrentY, termStartY)
+						}
+					}
+					if !inTerminal {
+						_ = a.registry.Execute(ev.ActionID, ctx)
+					}
+				}
+				a.render()
+				continue
+			}
+			if ev.ActionID == "mouse.scroll" {
+				a.routeMouseScroll(ctx)
+				a.render()
+				continue
 			}
 
 			switch a.inputMode {
@@ -322,6 +376,11 @@ func (a *App) Run() error {
 
 		case events.EventTerminalOutput:
 			// Terminal output received — just re-render (state is updated via Lines()).
+
+		case events.EventTerminalKey:
+			if p, ok := ev.Payload.(events.TerminalKeyPayload); ok {
+				a.handleTerminalRawKey(p)
+			}
 		}
 
 		a.render()
@@ -374,24 +433,9 @@ func (a *App) handleNormalAction(actionID string, ctx *actions.ActionContext) {
 		return
 	}
 
-	// Mouse click routing — determine focus based on click position.
-	if actionID == "mouse.click" {
-		a.routeMouseClick(ctx)
-		return
-	}
-
-	// Mouse scroll routing.
-	if actionID == "mouse.scroll" {
-		a.routeMouseScroll(ctx)
-		return
-	}
-
-	// Mouse drag routing.
-	if actionID == "mouse.drag" {
-		// Drags only make sense in the editor area.
-		if a.focusArea == actions.FocusEditor {
-			_ = a.registry.Execute(actionID, ctx)
-		}
+	// Mouse events are handled globally in the main loop (before mode dispatch).
+	// They should never reach here, but guard just in case.
+	if actionID == "mouse.click" || actionID == "mouse.drag" || actionID == "mouse.scroll" {
 		return
 	}
 
@@ -479,6 +523,25 @@ func (a *App) routeMouseClick(ctx *actions.ActionContext) {
 		}
 	}
 
+	// Terminal area click (bottom panel) — check Y first, takes priority.
+	_, h := a.screen.Size()
+	if a.termVisible && len(a.termSessions) > 0 {
+		termStartY := h - 1 - a.termHeight // -1 for statusline.
+		if termStartY < 1 {
+			termStartY = 1
+		}
+		if payload.ScreenY >= termStartY {
+			a.SetFocusArea(actions.FocusTerminal)
+			a.SetInputMode(actions.ModeTerminal)
+			a.termStartSelection(payload.ScreenX, payload.ScreenY, termStartY)
+			return
+		}
+	}
+	// Statusline click — ignore.
+	if payload.ScreenY >= h-1 {
+		return
+	}
+
 	// Minimap area click.
 	if a.minimapVisible && payload.ScreenX >= editorW && payload.ScreenX < editorW+minimapW {
 		a.focusArea = actions.FocusEditor
@@ -495,6 +558,10 @@ func (a *App) routeMouseClick(ctx *actions.ActionContext) {
 
 	// Editor area click.
 	a.focusArea = actions.FocusEditor
+	a.termSelection = nil // Clear terminal selection.
+	if a.inputMode == actions.ModeTerminal {
+		a.SetInputMode(actions.ModeNormal)
+	}
 	_ = a.registry.Execute("mouse.click", ctx)
 }
 
@@ -506,6 +573,25 @@ func (a *App) routeMouseScroll(ctx *actions.ActionContext) {
 	}
 
 	w, _ := a.screen.Size()
+
+	// Scroll in terminal area — send Page Up/Down to PTY or scroll scrollback.
+	if a.termVisible && len(a.termSessions) > 0 {
+		_, h := a.screen.Size()
+		termStartY := h - 1 - a.termHeight
+		if payload.ScreenY >= termStartY {
+			// For now, forward as scroll to PTY (e.g., for less/man).
+			session := a.termSessions[a.termActiveIdx]
+			if !session.IsClosed() {
+				if payload.Direction < 0 {
+					_ = session.Write([]byte{0x1b, '[', '5', '~'}) // Page Up
+				} else {
+					_ = session.Write([]byte{0x1b, '[', '6', '~'}) // Page Down
+				}
+			}
+			return
+		}
+	}
+
 	editorW := a.editorWidth(w)
 	minimapW := 0
 	if a.minimapVisible {
@@ -966,6 +1052,14 @@ func (a *App) InputMode() actions.InputMode {
 // SetInputMode sets the input routing mode.
 func (a *App) SetInputMode(mode actions.InputMode) {
 	a.inputMode = mode
+	a.syncTerminalFocus()
+}
+
+// syncTerminalFocus notifies the input handler whether the terminal is focused.
+func (a *App) syncTerminalFocus() {
+	if a.inputHandler != nil {
+		a.inputHandler.SetTerminalFocused(a.inputMode == actions.ModeTerminal)
+	}
 }
 
 // ContextMenu returns the active context menu state, or nil.
@@ -1403,7 +1497,7 @@ func (a *App) handleCompletion(p *lsp.CompletionPayload) {
 		return
 	}
 
-	a.inputMode = actions.ModeCompletion
+	a.SetInputMode(actions.ModeCompletion)
 }
 
 // handleCompletionAction routes actions while the completion popup is active.
@@ -1448,12 +1542,12 @@ func (a *App) handleCompletionAction(actionID string, ctx *actions.ActionContext
 				a.completion.UpdatePrefix(newPrefix)
 				if a.completion.IsEmpty() {
 					a.completion = nil
-					a.inputMode = actions.ModeNormal
+					a.SetInputMode(actions.ModeNormal)
 				}
 			} else {
 				// Cursor moved to different line — dismiss.
 				a.completion = nil
-				a.inputMode = actions.ModeNormal
+				a.SetInputMode(actions.ModeNormal)
 			}
 		}
 
@@ -1480,12 +1574,12 @@ func (a *App) handleCompletionAction(actionID string, ctx *actions.ActionContext
 				a.completion.UpdatePrefix(newPrefix)
 				if a.completion.IsEmpty() {
 					a.completion = nil
-					a.inputMode = actions.ModeNormal
+					a.SetInputMode(actions.ModeNormal)
 				}
 			} else {
 				// Backspaced before anchor — dismiss.
 				a.completion = nil
-				a.inputMode = actions.ModeNormal
+				a.SetInputMode(actions.ModeNormal)
 			}
 		}
 		return
@@ -1493,7 +1587,7 @@ func (a *App) handleCompletionAction(actionID string, ctx *actions.ActionContext
 	default:
 		// Any other action: dismiss completion and process normally.
 		a.completion = nil
-		a.inputMode = actions.ModeNormal
+		a.SetInputMode(actions.ModeNormal)
 		a.handleNormalAction(actionID, ctx)
 		return
 	}
@@ -1511,7 +1605,7 @@ func (a *App) maybeAutoTriggerCompletion(ch string) {
 		return
 	}
 	srv, ok := srvAny.(*lsp.Server)
-	if !ok {
+	if !ok || srv == nil {
 		return
 	}
 	triggers := srv.TriggerCharacters()
@@ -1583,13 +1677,29 @@ func (a *App) detectLanguage(buf *editor.Buffer) {
 // --- LSP helpers ---
 
 // projectRoot returns the project root directory.
+// It tries to find a git root first, falling back to cwd.
 func (a *App) ProjectRoot() string {
+	// Start from the file's directory or cwd.
+	startDir := ""
 	if a.filePath != "" {
 		absPath, _ := filepath.Abs(a.filePath)
-		return filepath.Dir(absPath)
+		startDir = filepath.Dir(absPath)
+	} else {
+		startDir, _ = os.Getwd()
 	}
-	cwd, _ := os.Getwd()
-	return cwd
+	// Walk up looking for .git to find the real project root.
+	dir := startDir
+	for {
+		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return startDir
 }
 
 // startLSPForBuffer starts an LSP server for the buffer's language.
@@ -1660,6 +1770,18 @@ func (a *App) handleDefinition(p *lsp.DefinitionPayload) {
 		buf.CursorCol = byteCol
 		a.ensureCursorVisible()
 	} else {
+		if err := a.OpenFile(path); err != nil {
+			a.statusMsg = fmt.Sprintf("Cannot open %s: %v", filepath.Base(path), err)
+			return
+		}
+		buf = a.ActiveBuffer()
+		if loc.Range.Start.Line < buf.Text.LineCount() {
+			lineContent := buf.Text.Line(loc.Range.Start.Line)
+			_, byteCol := lsp.LSPToEditorPosition(loc.Range.Start, lineContent)
+			buf.CursorRow = loc.Range.Start.Line
+			buf.CursorCol = byteCol
+		}
+		a.ensureCursorVisible()
 		a.statusMsg = fmt.Sprintf("-> %s:%d", filepath.Base(path), loc.Range.Start.Line+1)
 	}
 }
@@ -1943,7 +2065,7 @@ func (a *App) handleCodeActions(p *lsp.CodeActionPayload) {
 		CursorRow: buf.CursorRow,
 		CursorCol: buf.CursorCol,
 	}
-	a.inputMode = actions.ModeCodeActions
+	a.SetInputMode(actions.ModeCodeActions)
 }
 
 // handleCodeActionsAction routes actions while the code actions popup is active.
@@ -2127,7 +2249,7 @@ func (a *App) maybeAutoTriggerSignatureHelp(ch string) {
 		return
 	}
 	srv, ok := srvAny.(*lsp.Server)
-	if !ok {
+	if !ok || srv == nil {
 		return
 	}
 	triggers := srv.SignatureHelpTriggerCharacters()
@@ -2160,16 +2282,16 @@ func (a *App) TerminalToggle() {
 			a.createTerminalSession()
 		}
 		a.termVisible = true
-		a.inputMode = actions.ModeTerminal
+		a.SetInputMode(actions.ModeTerminal)
 		a.focusArea = actions.FocusTerminal
 	} else if a.focusArea == actions.FocusTerminal {
 		// Terminal is visible and focused: hide it.
 		a.termVisible = false
-		a.inputMode = actions.ModeNormal
+		a.SetInputMode(actions.ModeNormal)
 		a.focusArea = actions.FocusEditor
 	} else {
 		// Terminal is visible but not focused: focus it.
-		a.inputMode = actions.ModeTerminal
+		a.SetInputMode(actions.ModeTerminal)
 		a.focusArea = actions.FocusTerminal
 	}
 }
@@ -2181,7 +2303,7 @@ func (a *App) TerminalNew() {
 	if !a.termVisible {
 		a.termVisible = true
 	}
-	a.inputMode = actions.ModeTerminal
+	a.SetInputMode(actions.ModeTerminal)
 	a.focusArea = actions.FocusTerminal
 }
 
@@ -2198,7 +2320,7 @@ func (a *App) TerminalClose() {
 
 	if len(a.termSessions) == 0 {
 		a.termVisible = false
-		a.inputMode = actions.ModeNormal
+		a.SetInputMode(actions.ModeNormal)
 		a.focusArea = actions.FocusEditor
 		return
 	}
@@ -2292,7 +2414,9 @@ func (a *App) buildTerminalViewState() *editor.TerminalState {
 		tabClosed[i] = s.IsClosed()
 	}
 
-	return &editor.TerminalState{
+	curRow, curCol := session.CursorPos()
+
+	result := &editor.TerminalState{
 		Visible:   true,
 		Lines:     lines,
 		ScrollY:   0,
@@ -2301,7 +2425,21 @@ func (a *App) buildTerminalViewState() *editor.TerminalState {
 		TabNames:  tabNames,
 		TabClosed: tabClosed,
 		Focused:   a.focusArea == actions.FocusTerminal,
+		CursorRow: curRow,
+		CursorCol: curCol,
+		GridRows:  session.GridRows(),
 	}
+
+	if a.termSelection != nil {
+		ts := a.termSelection
+		result.HasSelection = true
+		result.SelStartLine = ts.StartLine
+		result.SelStartCol = ts.StartCol
+		result.SelEndLine = ts.EndLine
+		result.SelEndCol = ts.EndCol
+	}
+
+	return result
 }
 
 // handleTerminalAction routes input events while the terminal is focused.
@@ -2394,6 +2532,242 @@ func (a *App) handleTerminalAction(actionID string, ctx *actions.ActionContext) 
 	default:
 		// Ignore unmapped actions while terminal is focused.
 	}
+}
+
+// handleTerminalRawKey converts a raw tcell key event to PTY bytes.
+func (a *App) handleTerminalRawKey(p events.TerminalKeyPayload) {
+	if len(a.termSessions) == 0 || a.termActiveIdx >= len(a.termSessions) {
+		return
+	}
+	session := a.termSessions[a.termActiveIdx]
+	if session.IsClosed() {
+		return
+	}
+
+	key := tcell.Key(p.Key)
+	ch := p.Rune
+	mod := tcell.ModMask(p.Modifiers)
+
+	// Handle Ctrl+V as paste from clipboard.
+	if key == tcell.KeyCtrlV {
+		clip := a.Clipboard()
+		if clip != nil {
+			text, err := clip.Read()
+			if err == nil && text != "" {
+				_ = session.WriteString(text)
+			}
+		}
+		return
+	}
+
+	// Ctrl+C with terminal selection → copy selected text.
+	if key == tcell.KeyCtrlC && a.termSelection != nil {
+		a.termCopySelection()
+		return
+	}
+
+	// Map tcell key to PTY bytes.
+	var data []byte
+	switch key {
+	case tcell.KeyRune:
+		if mod&tcell.ModCtrl != 0 {
+			// Ctrl+letter → send control character (0x01-0x1a).
+			if ch >= 'a' && ch <= 'z' {
+				data = []byte{byte(ch - 'a' + 1)}
+			} else if ch >= 'A' && ch <= 'Z' {
+				data = []byte{byte(ch - 'A' + 1)}
+			} else {
+				data = []byte(string(ch))
+			}
+		} else if mod&tcell.ModAlt != 0 {
+			// Alt+key → ESC prefix.
+			data = append([]byte{0x1b}, []byte(string(ch))...)
+		} else {
+			data = []byte(string(ch))
+		}
+	case tcell.KeyEnter:
+		data = []byte{'\r'}
+	case tcell.KeyBackspace, tcell.KeyBackspace2:
+		data = []byte{0x7f}
+	case tcell.KeyDelete:
+		data = []byte{0x1b, '[', '3', '~'}
+	case tcell.KeyTab:
+		data = []byte{'\t'}
+	case tcell.KeyBacktab: // Shift+Tab
+		data = []byte{0x1b, '[', 'Z'}
+	case tcell.KeyEscape:
+		data = []byte{0x1b}
+	case tcell.KeyUp:
+		data = []byte{0x1b, '[', 'A'}
+	case tcell.KeyDown:
+		data = []byte{0x1b, '[', 'B'}
+	case tcell.KeyRight:
+		data = []byte{0x1b, '[', 'C'}
+	case tcell.KeyLeft:
+		data = []byte{0x1b, '[', 'D'}
+	case tcell.KeyHome:
+		data = []byte{0x1b, '[', 'H'}
+	case tcell.KeyEnd:
+		data = []byte{0x1b, '[', 'F'}
+	case tcell.KeyPgUp:
+		data = []byte{0x1b, '[', '5', '~'}
+	case tcell.KeyPgDn:
+		data = []byte{0x1b, '[', '6', '~'}
+	case tcell.KeyInsert:
+		data = []byte{0x1b, '[', '2', '~'}
+	case tcell.KeyF1:
+		data = []byte{0x1b, 'O', 'P'}
+	case tcell.KeyF2:
+		data = []byte{0x1b, 'O', 'Q'}
+	case tcell.KeyF3:
+		data = []byte{0x1b, 'O', 'R'}
+	case tcell.KeyF4:
+		data = []byte{0x1b, 'O', 'S'}
+	case tcell.KeyF5:
+		data = []byte{0x1b, '[', '1', '5', '~'}
+	case tcell.KeyF6:
+		data = []byte{0x1b, '[', '1', '7', '~'}
+	case tcell.KeyF7:
+		data = []byte{0x1b, '[', '1', '8', '~'}
+	case tcell.KeyF8:
+		data = []byte{0x1b, '[', '1', '9', '~'}
+	case tcell.KeyF9:
+		data = []byte{0x1b, '[', '2', '0', '~'}
+	case tcell.KeyF10:
+		data = []byte{0x1b, '[', '2', '1', '~'}
+	case tcell.KeyF11:
+		data = []byte{0x1b, '[', '2', '3', '~'}
+	case tcell.KeyF12:
+		data = []byte{0x1b, '[', '2', '4', '~'}
+	default:
+		// Ctrl+key combinations (tcell encodes Ctrl+A as KeyCtrlA = 1, etc.)
+		if key >= 1 && key <= 26 {
+			data = []byte{byte(key)}
+		}
+	}
+
+	if len(data) > 0 {
+		// Clear terminal selection on any key input.
+		a.termSelection = nil
+		_ = session.Write(data)
+	}
+}
+
+// termStartSelection begins a text selection in the terminal panel.
+func (a *App) termStartSelection(screenX, screenY, termStartY int) {
+	// termStartY is the border row; +1 is header; +1 is tab bar; content starts at +2.
+	contentStartY := termStartY + 2
+	row := screenY - contentStartY
+	col := screenX
+
+	lineIdx := a.termScreenRowToLineIdx(row)
+	a.termSelection = &TermSelection{
+		StartLine: lineIdx,
+		StartCol:  col,
+		EndLine:   lineIdx,
+		EndCol:    col,
+	}
+}
+
+// termUpdateSelection extends the terminal selection to the current mouse position.
+func (a *App) termUpdateSelection(screenX, screenY, termStartY int) {
+	if a.termSelection == nil {
+		return
+	}
+	contentStartY := termStartY + 2
+	row := screenY - contentStartY
+	col := screenX
+
+	lineIdx := a.termScreenRowToLineIdx(row)
+	a.termSelection.EndLine = lineIdx
+	a.termSelection.EndCol = col
+}
+
+// termScreenRowToLineIdx converts a terminal content row to a Lines() index.
+func (a *App) termScreenRowToLineIdx(contentRow int) int {
+	if len(a.termSessions) == 0 || a.termActiveIdx >= len(a.termSessions) {
+		return 0
+	}
+	session := a.termSessions[a.termActiveIdx]
+	lines := session.Lines()
+	totalLines := len(lines)
+
+	_, h := a.screen.Size()
+	contentHeight := a.termHeight - 2 // border + tab bar
+	if contentHeight > h-4 {
+		contentHeight = h - 4
+	}
+
+	endLine := totalLines // scrollY=0 means latest
+	startLine := endLine - contentHeight
+	if startLine < 0 {
+		startLine = 0
+	}
+
+	lineIdx := startLine + contentRow
+	if lineIdx < 0 {
+		lineIdx = 0
+	}
+	if lineIdx >= totalLines {
+		lineIdx = totalLines - 1
+	}
+	return lineIdx
+}
+
+// termCopySelection copies the selected terminal text to the clipboard.
+func (a *App) termCopySelection() {
+	if a.termSelection == nil || len(a.termSessions) == 0 {
+		return
+	}
+	session := a.termSessions[a.termActiveIdx]
+	lines := session.Lines()
+
+	sel := a.termSelection
+	// Normalize direction.
+	startLine, startCol, endLine, endCol := sel.StartLine, sel.StartCol, sel.EndLine, sel.EndCol
+	if startLine > endLine || (startLine == endLine && startCol > endCol) {
+		startLine, startCol, endLine, endCol = endLine, endCol, startLine, startCol
+	}
+
+	var result strings.Builder
+	for i := startLine; i <= endLine && i < len(lines); i++ {
+		line := StripANSIForCopy(lines[i])
+		runes := []rune(line)
+
+		from := 0
+		to := len(runes)
+		if i == startLine {
+			from = startCol
+		}
+		if i == endLine {
+			to = endCol
+		}
+		if from < 0 {
+			from = 0
+		}
+		if to > len(runes) {
+			to = len(runes)
+		}
+		if from > to {
+			from = to
+		}
+
+		result.WriteString(string(runes[from:to]))
+		if i < endLine {
+			result.WriteByte('\n')
+		}
+	}
+
+	if clip := a.Clipboard(); clip != nil {
+		_ = clip.Write(result.String())
+		a.statusMsg = "Copied from terminal"
+	}
+	a.termSelection = nil
+}
+
+// StripANSIForCopy removes ANSI escape sequences from terminal output for clipboard.
+func StripANSIForCopy(s string) string {
+	return terminalpkg.StripANSI(s)
 }
 
 // cleanupTerminals closes all terminal sessions.

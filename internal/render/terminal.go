@@ -110,6 +110,15 @@ func (r *Renderer) renderTerminal(ts *editor.TerminalState, width, height int) {
 		startLine = 0
 	}
 
+	// Normalize selection for rendering.
+	selActive := ts.HasSelection
+	selStartLine, selStartCol := ts.SelStartLine, ts.SelStartCol
+	selEndLine, selEndCol := ts.SelEndLine, ts.SelEndCol
+	if selActive && (selStartLine > selEndLine || (selStartLine == selEndLine && selStartCol > selEndCol)) {
+		selStartLine, selStartCol, selEndLine, selEndCol = selEndLine, selEndCol, selStartLine, selStartCol
+	}
+	selStyle := tcell.StyleDefault.Background(tcell.NewRGBColor(60, 90, 160)).Foreground(tcell.ColorWhite)
+
 	for row := 0; row < contentHeight; row++ {
 		lineIdx := startLine + row
 		if lineIdx >= endLine || lineIdx >= totalLines {
@@ -124,27 +133,41 @@ func (r *Renderer) renderTerminal(ts *editor.TerminalState, width, height int) {
 			if col >= width {
 				break
 			}
-			r.screen.SetContent(col, startY+row, sc.Rune, nil, sc.Style.Background(tcell.NewRGBColor(15, 15, 15)))
+			style := sc.Style.Background(tcell.NewRGBColor(15, 15, 15))
+			// Apply selection highlight.
+			if selActive && lineIdx >= selStartLine && lineIdx <= selEndLine {
+				inSel := false
+				if selStartLine == selEndLine {
+					inSel = col >= selStartCol && col < selEndCol
+				} else if lineIdx == selStartLine {
+					inSel = col >= selStartCol
+				} else if lineIdx == selEndLine {
+					inSel = col < selEndCol
+				} else {
+					inSel = true
+				}
+				if inSel {
+					style = selStyle
+				}
+			}
+			r.screen.SetContent(col, startY+row, sc.Rune, nil, style)
 			col++
 		}
 	}
 
-	// Draw a cursor indicator on the last visible line if focused and at bottom.
-	if ts.Focused && ts.ScrollY == 0 && totalLines > 0 {
-		lastVisibleRow := contentHeight - 1
-		actualLastLine := totalLines - 1
-		displayRow := actualLastLine - startLine
-		if displayRow >= 0 && displayRow < contentHeight {
-			lastVisibleRow = displayRow
+	// Draw cursor at its real position from the terminal grid.
+	if ts.Focused && ts.ScrollY == 0 && ts.GridRows > 0 {
+		// The cursor row is relative to the grid. The grid rows are the last
+		// ts.GridRows entries in lines[]. Map cursor grid row to display row.
+		gridStartIdx := totalLines - ts.GridRows
+		if gridStartIdx < 0 {
+			gridStartIdx = 0
 		}
-
-		// Find the cursor position (end of last line).
-		lastLine := lines[totalLines-1]
-		stripped := terminal.StripANSI(lastLine)
-		cursorCol := len([]rune(stripped))
-		if cursorCol < width {
+		cursorLineIdx := gridStartIdx + ts.CursorRow
+		displayRow := cursorLineIdx - startLine
+		if displayRow >= 0 && displayRow < contentHeight && ts.CursorCol < width {
 			cursorStyle := tcell.StyleDefault.Background(tcell.NewRGBColor(200, 200, 200)).Foreground(tcell.NewRGBColor(15, 15, 15))
-			r.screen.SetContent(cursorCol, startY+lastVisibleRow, ' ', nil, cursorStyle)
+			r.screen.SetContent(ts.CursorCol, startY+displayRow, ' ', nil, cursorStyle)
 		}
 	}
 }

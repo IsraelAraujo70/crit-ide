@@ -1,6 +1,7 @@
 package input
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -20,6 +21,14 @@ type Handler struct {
 	lastClickTime int64 // Unix milliseconds of last click.
 	lastClickX    int
 	lastClickY    int
+	// Terminal raw mode: when set, keys are forwarded raw to the PTY.
+	terminalFocused atomic.Bool
+}
+
+// SetTerminalFocused sets whether the terminal has keyboard focus.
+// When true, the handler sends raw key events instead of mapped actions.
+func (h *Handler) SetTerminalFocused(v bool) {
+	h.terminalFocused.Store(v)
 }
 
 // NewHandler creates a new input handler.
@@ -142,6 +151,27 @@ func (h *Handler) handleMouse(ev *tcell.EventMouse) {
 // handleKey translates a tcell key event into an action event.
 // Hardcoded keymap. Will be replaced by a configurable keymap engine.
 func (h *Handler) handleKey(ev *tcell.EventKey) {
+	// When terminal is focused, send raw keys — except Ctrl+J (toggle) and Ctrl+Q (quit).
+	if h.terminalFocused.Load() {
+		if ev.Key() == tcell.KeyCtrlJ {
+			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "terminal.toggle"})
+			return
+		}
+		if ev.Key() == tcell.KeyCtrlQ {
+			h.bus.Send(events.Event{Type: events.EventAction, ActionID: "app.quit"})
+			return
+		}
+		h.bus.Send(events.Event{
+			Type: events.EventTerminalKey,
+			Payload: events.TerminalKeyPayload{
+				Key:       int32(ev.Key()),
+				Rune:      ev.Rune(),
+				Modifiers: int32(ev.Modifiers()),
+			},
+		})
+		return
+	}
+
 	// Ctrl+Space (NUL) for manual completion trigger.
 	if ev.Key() == tcell.KeyNUL || (ev.Key() == tcell.KeyRune && ev.Rune() == ' ' && ev.Modifiers()&tcell.ModCtrl != 0) {
 		h.bus.Send(events.Event{Type: events.EventAction, ActionID: "completion.trigger"})
@@ -210,10 +240,8 @@ func (h *Handler) handleKey(ev *tcell.EventKey) {
 		}
 	}
 
-	// Ctrl+` (backtick) → terminal toggle.
-	// tcell sends Ctrl+` as Ctrl+Rune with rune '`' on some terminals,
-	// or as KeyCtrlSpace/KeyNUL on others. We also check for the raw rune.
-	if ev.Modifiers()&tcell.ModCtrl != 0 && ev.Key() == tcell.KeyRune && ev.Rune() == '`' {
+	// Ctrl+J → terminal toggle.
+	if ev.Key() == tcell.KeyCtrlJ {
 		h.bus.Send(events.Event{Type: events.EventAction, ActionID: "terminal.toggle"})
 		return
 	}
